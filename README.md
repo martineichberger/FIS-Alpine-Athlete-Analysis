@@ -1,9 +1,9 @@
 # FIS-Alpine-Athlete-Analysis
 
-Version v3.1 kombiniert:
-- den modernen Header- und Dashboard-Aufbau
-- die robustere Athletensuche über die FIS-Biography-Suche
-- einen Fallback über DuckDuckGo, falls FIS keine Trefferliste liefert
+Version v3.2 erweitert den Resultate-Tab:
+- erkennt Tabellen auf der Athletenseite
+- zeigt eine Resultate-Tabelle an
+- berechnet erste Kennzahlen wie Starts, Top-10 und beste Platzierung
 
 ## Lokal starten
 ```bash

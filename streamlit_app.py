@@ -4,9 +4,10 @@ from urllib.parse import urlencode, quote_plus
 
 import requests
 import streamlit as st
+import pandas as pd
 
 APP_NAME = "FIS-Alpine-Athlete-Analysis"
-APP_VERSION = "v3.1-streamlit"
+APP_VERSION = "v3.2-streamlit"
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -130,6 +131,13 @@ st.markdown(
             font-size: 0.86rem;
             margin-top: 1rem;
         }
+        .result-panel {
+            background: #0d172a;
+            border: 1px solid #23375a;
+            border-radius: 18px;
+            padding: 14px;
+            margin-bottom: 1rem;
+        }
         div[data-testid="stRadio"] label {
             background: #0d172b;
             border: 1px solid #23375a;
@@ -180,9 +188,7 @@ def extract_profile_links_from_search_page(page: str):
         href = html.unescape(href).replace("&amp;", "&")
         if href.startswith("/"):
             href = FIS_PROFILE_PREFIX + href
-        elif href.startswith("http"):
-            pass
-        else:
+        elif not href.startswith("http"):
             href = FIS_PROFILE_PREFIX + "/" + href.lstrip("/")
         if "sectorcode=al" not in href.lower() and "sector=al" not in href.lower():
             continue
@@ -379,7 +385,6 @@ def search_athletes(query: str):
             athlete = fetch_profile(link)
         except Exception:
             continue
-
         unique_key = (
             athlete.get("name", "").strip().lower(),
             athlete.get("fis_code", "").strip(),
@@ -401,6 +406,42 @@ def search_athletes(query: str):
     return athletes[:12]
 
 
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_recent_results(athlete_url: str):
+    session = get_session()
+    r = session.get(athlete_url, timeout=TIMEOUT)
+    r.raise_for_status()
+    page = r.text
+
+    tables = pd.read_html(page)
+    frames = []
+    for df in tables:
+        columns = [str(c).strip() for c in df.columns]
+        cols_lower = " | ".join(columns).lower()
+        if any(k in cols_lower for k in ["date", "place", "event", "rank", "nation", "points"]):
+            df.columns = columns
+            frames.append(df)
+
+    if not frames:
+        return None
+
+    results = pd.concat(frames, ignore_index=True)
+    results = results.dropna(how="all")
+    results.columns = [str(c).strip() for c in results.columns]
+
+    wanted = []
+    for col in results.columns:
+        low = col.lower()
+        if any(k in low for k in ["date", "place", "event", "discipline", "rank", "result", "points", "nation"]):
+            wanted.append(col)
+
+    if wanted:
+        results = results[wanted]
+
+    results = results.head(25)
+    return results
+
+
 def metric_card(label: str, value: str):
     st.markdown(
         f'<div class="metric-card"><div class="metric-label">{label}</div><div class="metric-value">{value}</div></div>',
@@ -413,6 +454,45 @@ def kpi_card(label: str, value: str):
         f'<div class="kpi"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div></div>',
         unsafe_allow_html=True,
     )
+
+
+def summarize_results(df: pd.DataFrame):
+    if df is None or df.empty:
+        return {"starts": "0", "top10": "-", "best": "-", "disciplines": "-"}
+
+    starts = len(df)
+
+    best = "-"
+    rank_col = None
+    for col in df.columns:
+        if "rank" in col.lower() or "place" in col.lower():
+            rank_col = col
+            break
+
+    if rank_col:
+        numeric = pd.to_numeric(df[rank_col], errors="coerce")
+        if numeric.notna().any():
+            best_val = int(numeric.min())
+            best = str(best_val)
+            top10 = str(int((numeric <= 10).sum()))
+        else:
+            top10 = "-"
+    else:
+        top10 = "-"
+
+    disc_cols = [c for c in df.columns if "discipline" in c.lower() or "event" in c.lower()]
+    if disc_cols:
+        vals = df[disc_cols[0]].dropna().astype(str).head(5).tolist()
+        disciplines = ", ".join(vals[:3]) if vals else "-"
+    else:
+        disciplines = "-"
+
+    return {
+        "starts": str(starts),
+        "top10": top10,
+        "best": best,
+        "disciplines": disciplines
+    }
 
 
 if "results" not in st.session_state:
@@ -430,7 +510,7 @@ with st.sidebar:
         label_visibility="collapsed",
     )
     st.markdown("---")
-    st.caption("Die App hat jetzt den modernen Aufbau aus v3 und die robustere Suchlogik aus der funktionierenden Version.")
+    st.caption("Der Resultate-Tab zeigt jetzt die erkannten Resultat-Tabellen der Athletenseite, sofern sie auf der Profilseite direkt auslesbar sind.")
 
 st.markdown('<div class="header-wrap">', unsafe_allow_html=True)
 c1, c2, c3 = st.columns([2.4, 4.8, 0.8])
@@ -567,11 +647,35 @@ elif st.session_state.active_view == "Vergleich":
 
 elif st.session_state.active_view == "Resultate":
     st.markdown('<div class="section-title">Resultate</div>', unsafe_allow_html=True)
-    st.info("Dieses Modul ist vorbereitet. Als nächstes können hier Resultatlisten und FIS-Punkte eingebaut werden.")
-    if selected_athlete:
+    if not selected_athlete:
+        st.info("Suche zuerst einen Athleten.")
+    else:
         st.markdown(
             f'<div class="mini-card"><strong>{selected_athlete["name"]}</strong><br>{selected_athlete["nation"]} | FIS-Code {selected_athlete["fis_code"]}</div>',
             unsafe_allow_html=True,
         )
 
-st.markdown('<div class="footer-note">Aktueller Fokus: stabile Athletensuche und moderner App-Aufbau.</div>', unsafe_allow_html=True)
+        try:
+            results_df = fetch_recent_results(selected_athlete["url"])
+        except Exception as exc:
+            results_df = None
+            st.warning(f"Resultate konnten nicht geladen werden: {exc}")
+
+        summary = summarize_results(results_df)
+        s1, s2, s3, s4 = st.columns(4)
+        with s1:
+            kpi_card("Erkannte Starts", summary["starts"])
+        with s2:
+            kpi_card("Top 10", summary["top10"])
+        with s3:
+            kpi_card("Beste Platzierung", summary["best"])
+        with s4:
+            kpi_card("Disziplinen", summary["disciplines"])
+
+        if results_df is None or results_df.empty:
+            st.info("Auf der Profilseite konnte keine direkt auslesbare Resultat-Tabelle gefunden werden. Als nächster Schritt kann ein gezielterer Resultat-Parser eingebaut werden.")
+        else:
+            st.markdown('<div class="result-panel">Die untenstehenden Tabellen wurden direkt aus der Athletenseite erkannt und für die Analyse zusammengeführt.</div>', unsafe_allow_html=True)
+            st.dataframe(results_df, use_container_width=True, hide_index=True)
+
+st.markdown('<div class="footer-note">Aktueller Fokus: stabile Athletensuche, moderner App-Aufbau und erste Resultatendarstellung.</div>', unsafe_allow_html=True)
