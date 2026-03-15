@@ -66,8 +66,8 @@ st.markdown(
             --card: #ffffff;
         }
         .stApp { background: #ffffff; }
-        [data-testid="stSidebar"] { background: #ffffff; border-right: 1px solid var(--line); }
-        .header-shell { background: var(--navy); margin: -1rem -1rem 1rem -1rem; padding: 0.8rem 1.2rem; border-bottom: 1px solid #274a7f; }
+        [data-testid="stSidebar"] { display:none; }
+        .header-shell { background: var(--navy); margin: -1rem -1rem 1rem -1rem; width: calc(100% + 2rem); padding: 0.8rem 1.2rem; border-bottom: 1px solid #274a7f; }
         .header-title { color: #ffffff; font-size: 1.45rem; font-weight: 800; text-align: center; line-height: 1.2; margin-top: 0.2rem; }
         .header-version { color: #cddaf0; text-align: right; font-size: 0.9rem; padding-top: 0.35rem; }
         .content-title { color: var(--text); font-size: 1.15rem; font-weight: 800; margin-bottom: 0.75rem; }
@@ -536,17 +536,12 @@ unsafe_allow_html=True
 )
 
 
-with st.sidebar:
-    st.markdown("## Navigation")
-    st.session_state.active_view = st.radio(
-        "Bereich",
-        ["Athletendaten", "Rennauswertung", "FIS-Punkte", "Ergebnisse"],
-        label_visibility="collapsed",
-    )
-    st.markdown("---")
-    st.markdown('<div class="nav-caption">Die Ergebnisse werden fein granular aus der FIS-Ergebnisseite gelesen, inklusive Giant Slalom und chronologischer Sortierung.</div>', unsafe_allow_html=True)
+
+if "active_view" not in st.session_state:
+    st.session_state.active_view = "Athletendaten"
 
 if search_button:
+
     if not search_query.strip():
         st.warning("Bitte gib einen Athletennamen oder einen FIS-Code ein.")
     else:
@@ -559,10 +554,17 @@ if search_button:
 results = st.session_state.results
 selected_athlete = results[st.session_state.selected_index] if results else None
 
-left, right = st.columns([1.05, 2.15])
+nav_col, main_col = st.columns([0.9, 2.4])
 
-with left:
-    st.markdown('<div class="content-title">Trefferliste</div>', unsafe_allow_html=True)
+with nav_col:
+    st.markdown('<div class="content-title">Navigation</div>', unsafe_allow_html=True)
+    st.session_state.active_view = st.radio(
+        "Bereich",
+        ["Athletendaten", "Rennauswertung", "FIS-Punkte", "Ergebnisse"],
+        label_visibility="collapsed",
+    )
+    st.markdown('<div class="nav-caption">Die Navigation liegt jetzt unterhalb der Kopfzeile.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="content-title" style="margin-top:1rem;">Trefferliste</div>', unsafe_allow_html=True)
     if not results:
         st.info("Noch keine Treffer. Suche oben nach einem Athleten.")
     else:
@@ -577,7 +579,7 @@ with left:
         st.session_state.selected_index = idx
         selected_athlete = results[idx]
 
-with right:
+with main_col:
     if st.session_state.active_view == "Athletendaten":
         st.markdown('<div class="content-title">Athletendaten</div>', unsafe_allow_html=True)
         if not selected_athlete:
