@@ -12,7 +12,7 @@ import requests
 import streamlit as st
 
 APP_NAME = "FIS-Alpine-Athlete-Analysis"
-APP_VERSION = "v5.7-season-overview-filters"
+APP_VERSION = "v5.8-results-display-refresh"
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -883,6 +883,91 @@ def build_season_overview(df: pd.DataFrame, season: int):
     }
 
 
+def classify_result_status(position_value) -> str:
+    value = str(position_value or "").strip().upper()
+    if not value or value == "-":
+        return "Unklar"
+    if value in {"DNF", "DSQ", "DNS"}:
+        return value
+    if value in {"DNQ", "DNP", "DIS", "NPS"}:
+        return value
+    return "Gewertet" if value.isdigit() else value
+
+
+def build_result_display_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(
+            columns=[
+                "Datum", "Saison", "Disziplin", "Kategorie", "Rennort",
+                "Nation", "Position", "Status", "FIS-Punkte", "Cup-Punkte"
+            ]
+        )
+
+    view_df = df.copy()
+    view_df["Status"] = view_df["Position"].apply(classify_result_status)
+    view_df["PlatzZahl"] = pd.to_numeric(view_df["Position"], errors="coerce")
+
+    if "SortDate" not in view_df.columns and "Datum" in view_df.columns:
+        view_df["SortDate"] = pd.to_datetime(view_df["Datum"], format="%d-%m-%Y", errors="coerce")
+
+    return view_df
+
+
+def summarize_result_statuses(df: pd.DataFrame) -> dict:
+    if df is None or df.empty:
+        return {
+            "gewertet": "0",
+            "podien": "0",
+            "dnf": "0",
+            "dsq_dns": "0",
+        }
+
+    work = build_result_display_df(df)
+    numeric = pd.to_numeric(work["Position"], errors="coerce")
+
+    gewertet = int(numeric.notna().sum())
+    podien = int((numeric <= 3).sum()) if numeric.notna().any() else 0
+    dnf = int((work["Status"] == "DNF").sum())
+    dsq_dns = int(work["Status"].isin(["DSQ", "DNS"]).sum())
+
+    return {
+        "gewertet": str(gewertet),
+        "podien": str(podien),
+        "dnf": str(dnf),
+        "dsq_dns": str(dsq_dns),
+    }
+
+
+def discipline_overview_table(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["Disziplin", "Starts", "Gewertet", "DNF", "DSQ", "DNS", "Beste Platzierung"])
+
+    work = build_result_display_df(df)
+    grouped = []
+    for discipline, group in work.groupby("Disziplin", dropna=False):
+        numeric = pd.to_numeric(group["Position"], errors="coerce")
+        best = "-"
+        if numeric.notna().any():
+            best = str(int(numeric.min()))
+        grouped.append(
+            {
+                "Disziplin": discipline,
+                "Starts": int(len(group)),
+                "Gewertet": int(numeric.notna().sum()),
+                "DNF": int((group["Status"] == "DNF").sum()),
+                "DSQ": int((group["Status"] == "DSQ").sum()),
+                "DNS": int((group["Status"] == "DNS").sum()),
+                "Beste Platzierung": best,
+            }
+        )
+
+    return (
+        pd.DataFrame(grouped)
+        .sort_values(["Starts", "Disziplin"], ascending=[False, True])
+        .reset_index(drop=True)
+    )
+
+
 def metric_card(label: str, value: str):
     st.markdown(
         f'<div class="metric-card"><div class="metric-label">{label}</div><div class="metric-value">{value}</div></div>',
@@ -1096,50 +1181,108 @@ with main_col:
             if results_df is None or results_df.empty:
                 st.info("Auf der Ergebnisseite konnten keine auslesbaren Resultate gefunden werden.")
             else:
-                seasons = sorted(results_df["Saison"].dropna().astype(str).unique().tolist(), reverse=True)
-                disciplines = sorted(results_df["Disziplin"].dropna().astype(str).unique().tolist())
-                categories = sorted(results_df["Kategorie"].dropna().astype(str).unique().tolist())
+                results_view_df = build_result_display_df(results_df)
 
-                f1, f2, f3 = st.columns(3)
+                seasons = sorted(results_view_df["Saison"].dropna().astype(str).unique().tolist(), reverse=True)
+                disciplines = sorted(results_view_df["Disziplin"].dropna().astype(str).unique().tolist())
+                categories = sorted(results_view_df["Kategorie"].dropna().astype(str).unique().tolist())
+                statuses = ["Alle Status", "Gewertet", "DNF", "DSQ", "DNS", "DNQ", "DNP", "DIS", "NPS", "Unklar"]
+
+                f1, f2, f3, f4 = st.columns(4)
                 with f1:
-                    selected_season = st.selectbox("Saison wählen", ["Gesamtstatistik"] + seasons)
+                    selected_season = st.selectbox("Saison", ["Alle Saisonen"] + seasons, key="results_season_filter")
                 with f2:
-                    selected_discipline = st.selectbox("Disziplin filtern", ["Alle Disziplinen"] + disciplines)
+                    selected_discipline = st.selectbox("Disziplin", ["Alle Disziplinen"] + disciplines, key="results_discipline_filter")
                 with f3:
-                    selected_category = st.selectbox("Kategorie filtern", ["Alle Kategorien"] + categories)
+                    selected_category = st.selectbox("Kategorie", ["Alle Kategorien"] + categories, key="results_category_filter")
+                with f4:
+                    selected_status = st.selectbox("Status", statuses, key="results_status_filter")
 
-                filtered_df = results_df.copy()
-                if selected_season != "Gesamtstatistik":
+                filtered_df = results_view_df.copy()
+                if selected_season != "Alle Saisonen":
                     filtered_df = filtered_df[filtered_df["Saison"].astype(str) == selected_season].copy()
                 if selected_discipline != "Alle Disziplinen":
                     filtered_df = filtered_df[filtered_df["Disziplin"].astype(str) == selected_discipline].copy()
                 if selected_category != "Alle Kategorien":
                     filtered_df = filtered_df[filtered_df["Kategorie"].astype(str) == selected_category].copy()
+                if selected_status != "Alle Status":
+                    filtered_df = filtered_df[filtered_df["Status"].astype(str) == selected_status].copy()
 
                 summary = summarize_results(filtered_df)
+                status_summary = summarize_result_statuses(filtered_df)
+
                 s1, s2, s3, s4 = st.columns(4)
                 with s1:
-                    kpi_card("Starts", summary["starts"])
+                    kpi_card("Angezeigte Rennen", summary["starts"])
                 with s2:
-                    kpi_card("Top 10", summary["top10"])
+                    kpi_card("Gewertet", status_summary["gewertet"])
                 with s3:
-                    kpi_card("Beste Platzierung", summary["best"])
+                    kpi_card("Podien", status_summary["podien"])
                 with s4:
+                    kpi_card("Beste Platzierung", summary["best"])
+
+                s5, s6, s7, s8 = st.columns(4)
+                with s5:
+                    kpi_card("Top 10", summary["top10"])
+                with s6:
+                    kpi_card("DNF", status_summary["dnf"])
+                with s7:
+                    kpi_card("DSQ + DNS", status_summary["dsq_dns"])
+                with s8:
                     kpi_card("Disziplinen", summary["disciplines"])
 
-                st.markdown('<div class="panel-note">Die Ergebnisse sind jetzt direkt nach Saison, Disziplin und Kategorie filterbar. Slalom und Giant Slalom werden sauber getrennt. Zusätzlich wird der Rennort angezeigt und die Ergebnislogik durchsucht weitere Result-URLs, Pagination-Varianten und „Show More“-Bereiche.</div>', unsafe_allow_html=True)
+                st.markdown(
+                    '<div class="panel-note">Die Ergebnisanzeige wurde überarbeitet: klare Filter, zusätzlicher Status je Rennen, bessere Übersicht nach Disziplin und eine bereinigte Ergebnisliste mit Datum, Ort, Kategorie und Punkten.</div>',
+                    unsafe_allow_html=True,
+                )
 
-                discipline_summary = starts_by_discipline(filtered_df)
-                col_a, col_b = st.columns([1, 2])
-                with col_a:
-                    st.markdown("**Starts pro Disziplin**")
-                    st.dataframe(discipline_summary, use_container_width=True, hide_index=True)
-                with col_b:
-                    st.markdown("**Chronologische Ergebnisliste**")
-                    display_cols = [c for c in ["Datum", "Saison", "Disziplin", "Kategorie", "Rennort", "Nation", "Position", "FIS-Punkte", "Cup-Punkte"] if c in filtered_df.columns]
-                    chron_df = filtered_df.sort_values("SortDate", ascending=False).copy()
-                    st.dataframe(chron_df[display_cols], use_container_width=True, hide_index=True)
+                tab_overview, tab_results, tab_disciplines = st.tabs(["Übersicht", "Ergebnisliste", "Disziplinen"])
+
+                with tab_overview:
+                    left, right = st.columns([1, 2])
+                    with left:
+                        st.markdown("**Starts pro Disziplin**")
+                        st.dataframe(
+                            starts_by_discipline(filtered_df),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+                    with right:
+                        st.markdown("**Statusübersicht der gefilterten Rennen**")
+                        status_df = pd.DataFrame(
+                            [
+                                {"Status": "Gewertet", "Anzahl": status_summary["gewertet"]},
+                                {"Status": "DNF", "Anzahl": status_summary["dnf"]},
+                                {"Status": "DSQ + DNS", "Anzahl": status_summary["dsq_dns"]},
+                            ]
+                        )
+                        st.dataframe(status_df, use_container_width=True, hide_index=True)
+
+                with tab_results:
+                    display_cols = [
+                        c for c in
+                        ["Datum", "Saison", "Disziplin", "Kategorie", "Rennort", "Nation", "Position", "Status", "FIS-Punkte", "Cup-Punkte"]
+                        if c in filtered_df.columns
+                    ]
+                    chron_df = (
+                        filtered_df
+                        .sort_values(["SortDate", "Disziplin", "Kategorie"], ascending=[False, True, True])
+                        .copy()
+                    )
+                    st.dataframe(
+                        chron_df[display_cols],
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+                with tab_disciplines:
+                    st.markdown("**Detailübersicht nach Disziplin**")
+                    st.dataframe(
+                        discipline_overview_table(filtered_df),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
 
                 st.link_button("Offizielle FIS-Ergebnisseite öffnen", results_url_from_profile(selected_athlete["url"]))
 
-st.markdown('<div class="footer-note">v5.7 ergänzt Filter für Saison, Disziplin und Kategorie in der Ergebnisansicht und zeigt im Reiter Athletendaten einen Saisonüberblick der aktuellen Saison mit Rennen, Starts pro Disziplin sowie DNF-, DSQ- und DNS-Quoten.</div>', unsafe_allow_html=True)
+st.markdown('<div class="footer-note">v5.8 überarbeitet die Ergebnisanzeige mit klareren Filtern, Status-Auswertung, Tabs für Übersicht und Ergebnisliste sowie einer deutlich besseren Disziplinenübersicht.</div>', unsafe_allow_html=True)

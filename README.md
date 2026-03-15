@@ -1,12 +1,12 @@
 # FIS-Alpine-Athlete-Analysis
 
-Version **v5.7** ergänzt Filter in der Ergebnisansicht und einen Saisonüberblick der aktuellen Saison direkt im Reiter Athletendaten.
+Version **v5.8** überarbeitet die Ergebnisanzeige deutlich und macht den Reiter Ergebnisse klarer und auswertbarer.
 
 - `streamlit_app.py`
 - `requirements.txt`
 - `README.md`
 
-## Neu in v5.7
+## Neu in v5.8
 
 - Athletensuche funktioniert wieder stabil
 - FIS-Code wird in Trefferliste und Detailansicht zuverlässig angezeigt
@@ -44,7 +44,8 @@ streamlit_app.py
 
 
 Neu:
-- Ergebnisansicht ist jetzt nach Saison, Disziplin und Kategorie filterbar
-- Im Reiter Athletendaten wird ein Saisonüberblick der aktuellen Saison angezeigt
-- Saisonüberblick enthält Gesamtzahl der Rennen, Starts pro Disziplin sowie DNF-, DSQ- und DNS-Quoten
-- robuste Ergebnis-Pagination und Show-More-Logik bleiben erhalten
+- Ergebnisanzeige mit klareren Filtern für Saison, Disziplin, Kategorie und Status
+- zusätzliche Status-Spalte je Rennen
+- Tabs für Übersicht, Ergebnisliste und Disziplinenvergleich
+- bessere KPI-Anzeige für Gewertet, Podien, DNF sowie DSQ/DNS
+- Saisonüberblick im Reiter Athletendaten bleibt erhalten
