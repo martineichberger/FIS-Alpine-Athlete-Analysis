@@ -1,12 +1,12 @@
 # FIS-Alpine-Athlete-Analysis
 
-Version v4.2 erweitert den Reiter **Ergebnisse**.
+Version v4.3 verbessert den Reiter **Ergebnisse**.
 
 Neu:
-- liest die FIS-Ergebnisseite mit `type=result`
+- berücksichtigt alle erkannten Disziplinen, inklusive Giant Slalom
+- genaue chronologische Ergebnisliste
 - Saison-Auswahl oder Gesamtstatistik
-- Anzahl der Starts pro Disziplin
-- Ergebnisübersicht als Tabelle
+- Starts pro Disziplin
 
 Lokal starten:
 ```bash

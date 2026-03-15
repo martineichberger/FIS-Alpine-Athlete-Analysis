@@ -8,7 +8,7 @@ import requests
 import streamlit as st
 
 APP_NAME = "FIS-Alpine-Athlete-Analysis"
-APP_VERSION = "v4.2-streamlit"
+APP_VERSION = "v4.3-streamlit"
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -21,24 +21,31 @@ DUCKDUCKGO_HTML = "https://html.duckduckgo.com/html/"
 
 DISCIPLINES = [
     "Team Combined",
+    "Parallel Team",
+    "Parallel",
     "Alpine Combined",
+    "Combined",
     "Giant Slalom",
     "Super G",
     "Downhill",
     "Slalom",
 ]
 CATEGORY_LABELS = [
+    "Olympic Winter Games",
     "World Championships",
     "World Cup",
     "European Cup",
     "South American Cup",
+    "North American Cup",
+    "Far East Cup",
+    "Australia New Zealand Cup",
     "National Championships",
     "National Junior Championships",
     "National Junior Race",
-    "Training",
-    "FIS",
-    "CIT",
     "University",
+    "CIT",
+    "FIS",
+    "Training",
 ]
 
 st.set_page_config(
@@ -59,156 +66,40 @@ st.markdown(
             --card: #ffffff;
         }
         .stApp { background: #ffffff; }
-        [data-testid="stSidebar"] {
-            background: #ffffff;
-            border-right: 1px solid var(--line);
-        }
-        .header-shell {
-            background: var(--navy);
-            margin: -1rem -1rem 1rem -1rem;
-            padding: 0.8rem 1.2rem;
-            border-bottom: 1px solid #274a7f;
-        }
-        .header-title {
-            color: #ffffff;
-            font-size: 1.45rem;
-            font-weight: 800;
-            text-align: center;
-            line-height: 1.2;
-            margin-top: 0.2rem;
-        }
-        .header-version {
-            color: #cddaf0;
-            text-align: right;
-            font-size: 0.9rem;
-            padding-top: 0.35rem;
-        }
-        .content-title {
-            color: var(--text);
-            font-size: 1.15rem;
-            font-weight: 800;
-            margin-bottom: 0.75rem;
-        }
-        .hero-card {
-            background: var(--card);
-            border: 1px solid var(--line);
-            border-radius: 18px;
-            padding: 1rem 1.1rem;
-            margin-bottom: 1rem;
-            box-shadow: 0 2px 14px rgba(16, 32, 56, 0.05);
-        }
-        .hero-name {
-            color: var(--text);
-            font-size: 1.65rem;
-            font-weight: 900;
-            line-height: 1.1;
-        }
-        .hero-meta {
-            color: var(--muted);
-            font-size: 0.95rem;
-            margin-top: 0.35rem;
-        }
-        .metric-card {
-            background: #ffffff;
-            border: 1px solid var(--line);
-            border-radius: 16px;
-            padding: 0.9rem 1rem;
-            margin-bottom: 0.8rem;
-            min-height: 92px;
-            box-shadow: 0 2px 10px rgba(16, 32, 56, 0.04);
-        }
-        .metric-label {
-            color: var(--muted);
-            font-size: 0.76rem;
-            text-transform: uppercase;
-            letter-spacing: 0.4px;
-            margin-bottom: 0.25rem;
-        }
-        .metric-value {
-            color: var(--text);
-            font-size: 1rem;
-            font-weight: 800;
-            line-height: 1.25;
-            word-break: break-word;
-        }
-        .kpi {
-            background: #f7f9fc;
-            border: 1px solid var(--line);
-            border-radius: 16px;
-            padding: 0.9rem 1rem;
-            margin-bottom: 0.8rem;
-        }
-        .kpi-label {
-            color: var(--muted);
-            font-size: 0.76rem;
-            text-transform: uppercase;
-            letter-spacing: 0.4px;
-        }
-        .kpi-value {
-            color: var(--text);
-            font-size: 1.3rem;
-            font-weight: 900;
-            margin-top: 0.2rem;
-        }
-        .panel-note {
-            background: #f8fbff;
-            border: 1px solid var(--line);
-            color: var(--muted);
-            border-radius: 14px;
-            padding: 0.8rem 0.95rem;
-            margin-bottom: 1rem;
-        }
-        .mini-card {
-            background: #ffffff;
-            border: 1px solid var(--line);
-            border-radius: 16px;
-            padding: 0.9rem;
-            margin-bottom: 0.8rem;
-        }
-        .footer-note {
-            color: var(--muted);
-            font-size: 0.86rem;
-            margin-top: 1rem;
-        }
-        .nav-caption {
-            color: var(--muted);
-            font-size: 0.85rem;
-            margin-top: 0.25rem;
-        }
-        div[data-testid="stTextInput"] input {
-            border-radius: 12px !important;
-            border: 1px solid #c9d5e7 !important;
-        }
-        div.stButton > button {
-            border-radius: 12px !important;
-            font-weight: 700 !important;
-        }
-        div[data-testid="stRadio"] label {
-            background: #ffffff;
-            border: 1px solid var(--line);
-            border-radius: 12px;
-            padding: 9px 10px;
-            margin-bottom: 7px;
-        }
-        div[data-testid="stRadio"] label:hover {
-            border-color: #9bb6dd;
-            background: #f7fbff;
-        }
+        [data-testid="stSidebar"] { background: #ffffff; border-right: 1px solid var(--line); }
+        .header-shell { background: var(--navy); margin: -1rem -1rem 1rem -1rem; padding: 0.8rem 1.2rem; border-bottom: 1px solid #274a7f; }
+        .header-title { color: #ffffff; font-size: 1.45rem; font-weight: 800; text-align: center; line-height: 1.2; margin-top: 0.2rem; }
+        .header-version { color: #cddaf0; text-align: right; font-size: 0.9rem; padding-top: 0.35rem; }
+        .content-title { color: var(--text); font-size: 1.15rem; font-weight: 800; margin-bottom: 0.75rem; }
+        .hero-card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 1rem 1.1rem; margin-bottom: 1rem; box-shadow: 0 2px 14px rgba(16, 32, 56, 0.05); }
+        .hero-name { color: var(--text); font-size: 1.65rem; font-weight: 900; line-height: 1.1; }
+        .hero-meta { color: var(--muted); font-size: 0.95rem; margin-top: 0.35rem; }
+        .metric-card { background: #ffffff; border: 1px solid var(--line); border-radius: 16px; padding: 0.9rem 1rem; margin-bottom: 0.8rem; min-height: 92px; box-shadow: 0 2px 10px rgba(16, 32, 56, 0.04); }
+        .metric-label { color: var(--muted); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 0.25rem; }
+        .metric-value { color: var(--text); font-size: 1rem; font-weight: 800; line-height: 1.25; word-break: break-word; }
+        .kpi { background: #f7f9fc; border: 1px solid var(--line); border-radius: 16px; padding: 0.9rem 1rem; margin-bottom: 0.8rem; }
+        .kpi-label { color: var(--muted); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.4px; }
+        .kpi-value { color: var(--text); font-size: 1.3rem; font-weight: 900; margin-top: 0.2rem; }
+        .panel-note { background: #f8fbff; border: 1px solid var(--line); color: var(--muted); border-radius: 14px; padding: 0.8rem 0.95rem; margin-bottom: 1rem; }
+        .mini-card { background: #ffffff; border: 1px solid var(--line); border-radius: 16px; padding: 0.9rem; margin-bottom: 0.8rem; }
+        .footer-note { color: var(--muted); font-size: 0.86rem; margin-top: 1rem; }
+        .nav-caption { color: var(--muted); font-size: 0.85rem; margin-top: 0.25rem; }
+        div[data-testid="stTextInput"] input { border-radius: 12px !important; border: 1px solid #c9d5e7 !important; }
+        div.stButton > button { border-radius: 12px !important; font-weight: 700 !important; }
+        div[data-testid="stRadio"] label { background: #ffffff; border: 1px solid var(--line); border-radius: 12px; padding: 9px 10px; margin-bottom: 7px; }
+        div[data-testid="stRadio"] label:hover { border-color: #9bb6dd; background: #f7fbff; }
     </style>
     """,
     unsafe_allow_html=True,
 )
-
 
 def get_session():
     session = requests.Session()
     session.headers.update({"User-Agent": USER_AGENT})
     return session
 
-
 def normalize_name(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip().lower()
-
 
 def clean_html(value: str) -> str:
     text = re.sub(r"<script.*?</script>", "", value, flags=re.IGNORECASE | re.DOTALL)
@@ -217,7 +108,6 @@ def clean_html(value: str) -> str:
     text = html.unescape(text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
-
 
 def extract_profile_links_from_search_page(page: str):
     matches = re.findall(r'href="([^"]*athlete-biography\.html[^"]+)"', page, flags=re.IGNORECASE)
@@ -233,7 +123,6 @@ def extract_profile_links_from_search_page(page: str):
         if href not in results:
             results.append(href)
     return results
-
 
 def extract_profile_links_duckduckgo(page: str):
     pattern = re.compile(r'href="(.*?)"', re.IGNORECASE)
@@ -254,7 +143,6 @@ def extract_profile_links_duckduckgo(page: str):
         if candidate not in results:
             results.append(candidate)
     return results
-
 
 def build_fis_search_urls(query: str):
     query = " ".join(query.split())
@@ -310,7 +198,6 @@ def build_fis_search_urls(query: str):
             unique.append(url)
     return unique
 
-
 def extract_value(text: str, label: str):
     pattern = rf"{re.escape(label)}\s*:?\s*(.{{0,90}}?)(?=\s+[A-Z][A-Za-z\- ]{{2,25}}\s*:|\s+[A-Z][a-z]+\s+[A-Z][A-Za-z]+\s*:|$)"
     match = re.search(pattern, text, re.IGNORECASE)
@@ -320,11 +207,9 @@ def extract_value(text: str, label: str):
     value = re.sub(r"\s+", " ", value)
     return value if value else "-"
 
-
 def extract_age(text: str):
     match = re.search(r"Age\s*:?\s*(\d{1,2})", text, re.IGNORECASE)
     return match.group(1) if match else "-"
-
 
 def country_code_to_flag(code: str) -> str:
     code = (code or "").strip().upper()
@@ -338,7 +223,6 @@ def country_code_to_flag(code: str) -> str:
         "CHN": "🇨🇳", "AUS": "🇦🇺", "NZL": "🇳🇿", "ARG": "🇦🇷", "CHI": "🇨🇱"
     }
     return special.get(code, "")
-
 
 def split_name(title_name: str):
     title_name = re.sub(r"\s+", " ", (title_name or "").strip())
@@ -354,7 +238,6 @@ def split_name(title_name: str):
     if len(parts) >= 2:
         return parts[-1], " ".join(parts[:-1])
     return title_name, "-"
-
 
 def extract_nation_from_page(page: str, clean_page: str):
     code_match = re.search(r">\s*([A-Z]{3})\s+([A-Z][a-zA-Z\-]+(?:\s+[A-Z][a-zA-Z\-]+)?)\s*<", page)
@@ -375,7 +258,6 @@ def extract_nation_from_page(page: str, clean_page: str):
         return "-", nation_label.strip()
     return "-", "-"
 
-
 @st.cache_data(ttl=900, show_spinner=False)
 def fetch_profile(url: str):
     session = get_session()
@@ -386,14 +268,11 @@ def fetch_profile(url: str):
     title_match = re.search(r"<h1[^>]*>(.*?)</h1>", page, re.IGNORECASE | re.DOTALL)
     raw_name = clean_html(title_match.group(1)) if title_match else "Unbekannter Athlet"
     last_name, first_name = split_name(raw_name)
-
     clean_page = clean_html(page)
     competitor_match = re.search(r"competitorid=(\d+)", url, re.IGNORECASE)
     competitor_id = competitor_match.group(1) if competitor_match else "-"
-
     nation_code, nation_name = extract_nation_from_page(page, clean_page)
     nation_flag = country_code_to_flag(nation_code)
-
     club = extract_value(clean_page, "Club")
     if club == "-":
         club_match = re.search(r"</h1>\s*([^<]{3,120})<", page, re.IGNORECASE | re.DOTALL)
@@ -401,7 +280,6 @@ def fetch_profile(url: str):
             club_candidate = clean_html(club_match.group(1))
             if club_candidate and len(club_candidate) <= 80:
                 club = club_candidate
-
     return {
         "name": raw_name,
         "last_name": last_name,
@@ -419,7 +297,6 @@ def fetch_profile(url: str):
         "url": url,
     }
 
-
 @st.cache_data(ttl=900, show_spinner=True)
 def search_athletes(query: str):
     query = " ".join(query.split())
@@ -427,7 +304,6 @@ def search_athletes(query: str):
         return []
     session = get_session()
     profile_links = []
-
     for url in build_fis_search_urls(query):
         try:
             response = session.get(url, timeout=TIMEOUT)
@@ -435,7 +311,6 @@ def search_athletes(query: str):
             profile_links.extend(extract_profile_links_from_search_page(response.text))
         except Exception:
             pass
-
     if not profile_links:
         ddg_query = (
             'site:fis-ski.com/DB/general/athlete-biography.html '
@@ -445,18 +320,15 @@ def search_athletes(query: str):
         response = session.get(DUCKDUCKGO_HTML, params={"q": ddg_query}, timeout=TIMEOUT)
         response.raise_for_status()
         profile_links.extend(extract_profile_links_duckduckgo(response.text))
-
     unique_links = []
     for link in profile_links:
         if link not in unique_links:
             unique_links.append(link)
-
     athletes = []
     seen = set()
     is_code = query.isdigit()
     q = normalize_name(query)
     parts = [p for p in q.split() if p]
-
     def score(athlete):
         name = normalize_name(athlete.get("name", ""))
         value = 0
@@ -469,7 +341,6 @@ def search_athletes(query: str):
         if is_code and athlete.get("fis_code") == query:
             value += 140
         return value
-
     for link in unique_links[:25]:
         try:
             athlete = fetch_profile(link)
@@ -485,14 +356,12 @@ def search_athletes(query: str):
         seen.add(unique_key)
         athlete["score"] = score(athlete)
         athletes.append(athlete)
-
     athletes.sort(key=lambda a: a.get("score", 0), reverse=True)
     if is_code:
         exact = [a for a in athletes if a.get("fis_code") == query]
         if exact:
             return exact[:12]
     return athletes[:12]
-
 
 def results_url_from_profile(athlete_url: str) -> str:
     if "type=result" in athlete_url:
@@ -501,7 +370,6 @@ def results_url_from_profile(athlete_url: str) -> str:
         return athlete_url + "&type=result"
     return athlete_url + "?type=result"
 
-
 def compute_season(date_str: str):
     try:
         dt = datetime.strptime(date_str, "%d-%m-%Y")
@@ -509,46 +377,57 @@ def compute_season(date_str: str):
         return None
     return dt.year + 1 if dt.month >= 7 else dt.year
 
+def extract_discipline(text: str):
+    lower = text.lower()
+    best = None
+    best_pos = -1
+    for d in DISCIPLINES:
+        pos = lower.rfind(d.lower())
+        if pos > best_pos:
+            best = d
+            best_pos = pos
+    return best, best_pos
 
-def parse_result_anchor_text(text: str):
+def parse_result_line(text: str):
     text = re.sub(r"\s+", " ", text).strip()
     if not re.match(r"^\d{2}-\d{2}-\d{4}\s", text):
         return None
 
     date_str = text[:10]
-    discipline = "-"
-    discipline_pos = -1
-    for d in DISCIPLINES:
-        pos = text.rfind(d)
-        if pos > discipline_pos:
-            discipline = d
-            discipline_pos = pos
-
-    if discipline_pos == -1:
+    discipline, discipline_pos = extract_discipline(text)
+    if not discipline:
         return None
 
-    rest_after_discipline = text[discipline_pos + len(discipline):].strip()
-    rest_tokens = rest_after_discipline.split()
+    after = text[discipline_pos + len(discipline):].strip()
+    tokens = after.split()
 
-    position = rest_tokens[0] if rest_tokens else "-"
+    position = "-"
     fis_points = "-"
     cup_points = "-"
-
-    if len(rest_tokens) >= 2 and re.match(r"^\d+(\.\d+)?$", rest_tokens[1]):
-        fis_points = rest_tokens[1]
-    if len(rest_tokens) >= 3 and re.match(r"^\d+(\.\d+)?$", rest_tokens[2]):
-        cup_points = rest_tokens[2]
+    if tokens:
+        position = tokens[0]
+    numeric_tokens = [t for t in tokens[1:] if re.match(r"^\d+(\.\d+)?$", t)]
+    if len(numeric_tokens) >= 1:
+        fis_points = numeric_tokens[0]
+    if len(numeric_tokens) >= 2:
+        cup_points = numeric_tokens[1]
 
     category = "-"
     for cat in CATEGORY_LABELS:
-        if cat in text:
+        if cat.lower() in text.lower():
             category = cat
             break
 
     nation = "-"
-    nation_match = re.search(r"\b([A-Z]{3})\b", text[10:])
-    if nation_match:
-        nation = nation_match.group(1)
+    # pick last likely country code before discipline if possible, else first one after date
+    before_disc = text[10:discipline_pos]
+    codes = re.findall(r"\b([A-Z]{3})\b", before_disc)
+    if codes:
+        nation = codes[-1]
+    else:
+        codes = re.findall(r"\b([A-Z]{3})\b", text[10:])
+        if codes:
+            nation = codes[0]
 
     season = compute_season(date_str)
 
@@ -564,7 +443,6 @@ def parse_result_anchor_text(text: str):
         "Raw": text,
     }
 
-
 @st.cache_data(ttl=900, show_spinner=False)
 def fetch_result_entries(athlete_url: str):
     url = results_url_from_profile(athlete_url)
@@ -573,13 +451,18 @@ def fetch_result_entries(athlete_url: str):
     r.raise_for_status()
     page = r.text
 
+    candidates = []
+    # anchor texts
     anchors = re.findall(r"<a[^>]*>(.*?)</a>", page, flags=re.IGNORECASE | re.DOTALL)
+    candidates.extend(clean_html(a) for a in anchors)
+    # fallback on longer text blocks with dates
+    blocks = re.findall(r">(.*?)<", page, flags=re.IGNORECASE | re.DOTALL)
+    candidates.extend(clean_html(b) for b in blocks if re.search(r"\d{2}-\d{2}-\d{4}", clean_html(b)))
+
     entries = []
     seen = set()
-
-    for anchor in anchors:
-        clean_text = clean_html(anchor)
-        parsed = parse_result_anchor_text(clean_text)
+    for text in candidates:
+        parsed = parse_result_line(text)
         if not parsed:
             continue
         key = (parsed["Datum"], parsed["Disziplin"], parsed["Position"], parsed["Raw"])
@@ -592,8 +475,9 @@ def fetch_result_entries(athlete_url: str):
         return None
 
     df = pd.DataFrame(entries)
-    return df.sort_values("Datum", ascending=False).reset_index(drop=True)
-
+    df["SortDate"] = pd.to_datetime(df["Datum"], format="%d-%m-%Y", errors="coerce")
+    df = df.sort_values(["SortDate", "Disziplin", "Kategorie"], ascending=[False, True, True]).reset_index(drop=True)
+    return df
 
 def summarize_results(df: pd.DataFrame):
     if df is None or df.empty:
@@ -602,22 +486,19 @@ def summarize_results(df: pd.DataFrame):
     numeric = pd.to_numeric(df["Position"], errors="coerce")
     best = str(int(numeric.min())) if numeric.notna().any() else "-"
     top10 = str(int((numeric <= 10).sum())) if numeric.notna().any() else "-"
-    disciplines = ", ".join(df["Disziplin"].dropna().astype(str).unique()[:3]) if "Disziplin" in df else "-"
+    disciplines = ", ".join(df["Disziplin"].dropna().astype(str).unique()[:4]) if "Disziplin" in df else "-"
     return {"starts": str(starts), "top10": top10, "best": best, "disciplines": disciplines or "-"}
-
 
 def starts_by_discipline(df: pd.DataFrame):
     if df is None or df.empty:
         return pd.DataFrame(columns=["Disziplin", "Starts"])
-    summary = (
+    return (
         df.groupby("Disziplin", dropna=False)
         .size()
         .reset_index(name="Starts")
         .sort_values(["Starts", "Disziplin"], ascending=[False, True])
         .reset_index(drop=True)
     )
-    return summary
-
 
 def metric_card(label: str, value: str):
     st.markdown(
@@ -625,13 +506,11 @@ def metric_card(label: str, value: str):
         unsafe_allow_html=True,
     )
 
-
 def kpi_card(label: str, value: str):
     st.markdown(
         f'<div class="kpi"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div></div>',
         unsafe_allow_html=True,
     )
-
 
 if "results" not in st.session_state:
     st.session_state.results = []
@@ -662,7 +541,7 @@ with st.sidebar:
         label_visibility="collapsed",
     )
     st.markdown("---")
-    st.markdown('<div class="nav-caption">Die Ergebnisse werden aus der FIS-Ergebnisseite mit <code>type=result</code> gelesen und saisonweise ausgewertet.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="nav-caption">Die Ergebnisse werden fein granular aus der FIS-Ergebnisseite gelesen, inklusive Giant Slalom und chronologischer Sortierung.</div>', unsafe_allow_html=True)
 
 if search_button:
     if not search_query.strip():
@@ -718,7 +597,6 @@ with right:
             for col, (label, value) in zip(row1, summary):
                 with col:
                     kpi_card(label, value)
-
             row2 = st.columns(4)
             details = [
                 ("Nation", f'{selected_athlete["nation_flag"]} {selected_athlete["nation_name"]}'.strip()),
@@ -729,7 +607,6 @@ with right:
             for col, (label, value) in zip(row2, details):
                 with col:
                     metric_card(label, value)
-
             st.link_button("Offizielles FIS-Profil öffnen", selected_athlete["url"])
 
     elif st.session_state.active_view == "Rennauswertung":
@@ -755,7 +632,6 @@ with right:
                 f'<div class="mini-card"><strong>{selected_athlete["name"]}</strong><br>{selected_athlete["nation_flag"]} {selected_athlete["nation_name"]} | FIS-Code {selected_athlete["fis_code"]}</div>',
                 unsafe_allow_html=True,
             )
-
             try:
                 results_df = fetch_result_entries(selected_athlete["url"])
             except Exception as exc:
@@ -785,7 +661,7 @@ with right:
                 with s4:
                     kpi_card("Disziplinen", summary["disciplines"])
 
-                st.markdown('<div class="panel-note">Die Starts pro Disziplin werden aus der FIS-Ergebnisseite dieser Saison oder über alle Saisonen zusammengefasst.</div>', unsafe_allow_html=True)
+                st.markdown('<div class="panel-note">Alle erkannten Disziplinen werden berücksichtigt. Die Resultate sind exakt chronologisch sortiert: neuestes Rennen zuerst.</div>', unsafe_allow_html=True)
 
                 discipline_summary = starts_by_discipline(filtered_df)
                 col_a, col_b = st.columns([1, 2])
@@ -793,10 +669,11 @@ with right:
                     st.markdown("**Starts pro Disziplin**")
                     st.dataframe(discipline_summary, use_container_width=True, hide_index=True)
                 with col_b:
-                    st.markdown("**Resultatübersicht**")
+                    st.markdown("**Chronologische Ergebnisliste**")
                     display_cols = [c for c in ["Datum", "Saison", "Disziplin", "Kategorie", "Nation", "Position", "FIS-Punkte", "Cup-Punkte"] if c in filtered_df.columns]
-                    st.dataframe(filtered_df[display_cols], use_container_width=True, hide_index=True)
+                    chron_df = filtered_df.sort_values("SortDate", ascending=False).copy()
+                    st.dataframe(chron_df[display_cols], use_container_width=True, hide_index=True)
 
                 st.link_button("Offizielle FIS-Ergebnisseite öffnen", results_url_from_profile(selected_athlete["url"]))
 
-st.markdown('<div class="footer-note">Der Ergebnisse-Bereich nutzt die FIS-Ergebnisseite mit saisonweiser Auswahl oder Gesamtstatistik.</div>', unsafe_allow_html=True)
+st.markdown('<div class="footer-note">v4.3 verbessert den Ergebnisse-Parser für alle Disziplinen, inklusive Giant Slalom, und zeigt die Resultate chronologisch an.</div>', unsafe_allow_html=True)
