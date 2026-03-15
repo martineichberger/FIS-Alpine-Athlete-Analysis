@@ -519,19 +519,22 @@ if "selected_index" not in st.session_state:
 if "active_view" not in st.session_state:
     st.session_state.active_view = "Athletendaten"
 
-st.markdown('<div class="header-shell">', unsafe_allow_html=True)
-h1, h2, h3 = st.columns([2.4, 5.2, 0.8])
-with h1:
-    s1, s2 = st.columns([3.1, 1.45])
-    with s1:
-        search_query = st.text_input("", placeholder="Athlet oder FIS-Code suchen…", label_visibility="collapsed")
-    with s2:
-        search_button = st.button("Suchen", use_container_width=True)
-with h2:
-    st.markdown(f'<div class="header-title">{APP_NAME}</div>', unsafe_allow_html=True)
-with h3:
-    st.markdown(f'<div class="header-version">{APP_VERSION}</div>', unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
+
+st.markdown(
+'''
+<div style="background:#102649;color:white;padding:14px 22px;margin:-1rem -1rem 1rem -1rem;
+display:flex;align-items:center;justify-content:space-between;">
+    <div style="font-weight:800;font-size:1.35rem;">FIS-Alpine-Athlete-Analysis</div>
+    <div style="display:flex;align-items:center;gap:16px;">
+        <div style="opacity:0.9;">v5.0</div>
+        <button style="background:#1e3a6b;border:none;color:white;
+        font-weight:700;border-radius:8px;padding:6px 10px;cursor:pointer;">?</button>
+    </div>
+</div>
+''',
+unsafe_allow_html=True
+)
+
 
 with st.sidebar:
     st.markdown("## Navigation")
