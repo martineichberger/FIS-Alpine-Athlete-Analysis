@@ -1,18 +1,21 @@
 import html
 import re
-from urllib.parse import quote_plus
+from urllib.parse import urlencode, quote_plus
 
 import requests
 import streamlit as st
 
 APP_NAME = "FIS-Alpine-Athlete-Analysis"
-APP_VERSION = "v3.0-streamlit"
+APP_VERSION = "v3.1-streamlit"
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/122.0.0.0 Safari/537.36"
 )
 TIMEOUT = 25
+FIS_SEARCH_URL = "https://www.fis-ski.com/DB/general/biographies.html"
+FIS_PROFILE_PREFIX = "https://www.fis-ski.com"
+DUCKDUCKGO_HTML = "https://html.duckduckgo.com/html/"
 
 st.set_page_config(
     page_title=APP_NAME,
@@ -150,8 +153,16 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
+def get_session():
+    session = requests.Session()
+    session.headers.update({"User-Agent": USER_AGENT})
+    return session
+
+
 def normalize_name(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip().lower()
+
 
 def clean_html(value: str) -> str:
     text = re.sub(r"<script.*?</script>", "", value, flags=re.IGNORECASE | re.DOTALL)
@@ -161,46 +172,134 @@ def clean_html(value: str) -> str:
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
-def extract_links(page: str):
+
+def extract_profile_links_from_search_page(page: str):
     matches = re.findall(r'href="([^"]*athlete-biography\.html[^"]+)"', page, flags=re.IGNORECASE)
     results = []
     for href in matches:
         href = html.unescape(href).replace("&amp;", "&")
-        if "sectorcode=al" not in href.lower():
-            continue
         if href.startswith("/"):
-            href = "https://www.fis-ski.com" + href
+            href = FIS_PROFILE_PREFIX + href
         elif href.startswith("http"):
             pass
         else:
-            href = "https://www.fis-ski.com/" + href.lstrip("/")
+            href = FIS_PROFILE_PREFIX + "/" + href.lstrip("/")
+        if "sectorcode=al" not in href.lower() and "sector=al" not in href.lower():
+            continue
         if href not in results:
             results.append(href)
     return results
 
+
+def extract_profile_links_duckduckgo(page: str):
+    pattern = re.compile(r'href="(.*?)"', re.IGNORECASE)
+    raw_links = pattern.findall(page)
+    results = []
+    for link in raw_links:
+        unescaped = html.unescape(link)
+        if "uddg=" in unescaped:
+            match = re.search(r"uddg=([^&]+)", unescaped)
+            candidate = requests.utils.unquote(match.group(1)) if match else unescaped
+        else:
+            candidate = unescaped
+
+        if "fis-ski.com/DB/general/athlete-biography.html" not in candidate:
+            continue
+        if "sectorcode=al" not in candidate.lower() and "sector=al" not in candidate.lower():
+            continue
+
+        candidate = candidate.replace("&amp;", "&")
+        if candidate not in results:
+            results.append(candidate)
+    return results
+
+
+def build_fis_search_urls(query: str):
+    query = " ".join(query.split())
+    is_code = query.isdigit()
+    urls = []
+
+    base_params = {
+        "sectorcode": "AL",
+        "search": "true",
+        "birthyear": "",
+        "gendercode": "",
+        "nationcode": "",
+        "skiclub": "",
+        "skis": "",
+        "status": "",
+    }
+
+    if is_code:
+        params = dict(base_params)
+        params["firstname"] = ""
+        params["lastname"] = ""
+        params["fiscode"] = query
+        urls.append(f"{FIS_SEARCH_URL}?{urlencode(params)}")
+        return urls
+
+    parts = query.split()
+    if len(parts) >= 2:
+        params = dict(base_params)
+        params["firstname"] = " ".join(parts[:-1])
+        params["lastname"] = parts[-1]
+        params["fiscode"] = ""
+        urls.append(f"{FIS_SEARCH_URL}?{urlencode(params)}")
+
+        params_rev = dict(base_params)
+        params_rev["firstname"] = parts[-1]
+        params_rev["lastname"] = " ".join(parts[:-1])
+        params_rev["fiscode"] = ""
+        urls.append(f"{FIS_SEARCH_URL}?{urlencode(params_rev)}")
+
+    params_last = dict(base_params)
+    params_last["firstname"] = ""
+    params_last["lastname"] = query
+    params_last["fiscode"] = ""
+    urls.append(f"{FIS_SEARCH_URL}?{urlencode(params_last)}")
+
+    params_first = dict(base_params)
+    params_first["firstname"] = query
+    params_first["lastname"] = ""
+    params_first["fiscode"] = ""
+    urls.append(f"{FIS_SEARCH_URL}?{urlencode(params_first)}")
+
+    unique = []
+    for url in urls:
+        if url not in unique:
+            unique.append(url)
+    return unique
+
+
 def extract_value(text: str, label: str):
-    pattern = rf"{re.escape(label)}\s*:?\s*(.{{0,90}}?)(?=\s+[A-Z][A-Za-z\- ]{{2,25}}\s*:|$)"
+    pattern = rf"{re.escape(label)}\s*:?\s*(.{{0,90}}?)(?=\s+[A-Z][A-Za-z\- ]{{2,25}}\s*:|\s+[A-Z][a-z]+\s+[A-Z][A-Za-z]+\s*:|$)"
     match = re.search(pattern, text, re.IGNORECASE)
-    if match:
-        value = match.group(1).strip(" :-")
-        value = re.sub(r"\s+", " ", value)
-        return value if value else "-"
-    return "-"
+    if not match:
+        return "-"
+    value = match.group(1).strip(" :-")
+    value = re.sub(r"\s+", " ", value)
+    return value if value else "-"
+
 
 def extract_age(text: str):
     match = re.search(r"Age\s*:?\s*(\d{1,2})", text, re.IGNORECASE)
     return match.group(1) if match else "-"
 
+
 @st.cache_data(ttl=900, show_spinner=False)
 def fetch_profile(url: str):
-    r = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
+    session = get_session()
+    r = session.get(url, timeout=TIMEOUT)
     r.raise_for_status()
     page = r.text
+
     title_match = re.search(r"<h1[^>]*>(.*?)</h1>", page, re.IGNORECASE | re.DOTALL)
     name = clean_html(title_match.group(1)) if title_match else "Unbekannter Athlet"
+
     clean_page = clean_html(page)
     competitor_match = re.search(r"competitorid=(\d+)", url, re.IGNORECASE)
     competitor_id = competitor_match.group(1) if competitor_match else "-"
+
     return {
         "name": name,
         "nation": extract_value(clean_page, "Nation"),
@@ -223,27 +322,64 @@ def fetch_profile(url: str):
         "url": url,
     }
 
+
 @st.cache_data(ttl=900, show_spinner=True)
 def search_athletes(query: str):
-    query = query.strip()
+    query = " ".join(query.split())
     if not query:
         return []
-    search_query = (
-        'site:fis-ski.com/DB/general/athlete-biography.html '
-        '"sectorcode=AL" '
-        f'"{query}"'
-    )
-    url = "https://html.duckduckgo.com/html/?q=" + quote_plus(search_query)
-    r = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
-    r.raise_for_status()
-    links = extract_links(r.text)
+
+    session = get_session()
+    profile_links = []
+
+    for url in build_fis_search_urls(query):
+        try:
+            response = session.get(url, timeout=TIMEOUT)
+            response.raise_for_status()
+            profile_links.extend(extract_profile_links_from_search_page(response.text))
+        except Exception:
+            pass
+
+    if not profile_links:
+        ddg_query = (
+            'site:fis-ski.com/DB/general/athlete-biography.html '
+            '"sectorcode=AL" '
+            f'"{query}"'
+        )
+        response = session.get(DUCKDUCKGO_HTML, params={"q": ddg_query}, timeout=TIMEOUT)
+        response.raise_for_status()
+        profile_links.extend(extract_profile_links_duckduckgo(response.text))
+
+    unique_links = []
+    for link in profile_links:
+        if link not in unique_links:
+            unique_links.append(link)
+
     athletes = []
     seen = set()
-    for link in links[:12]:
+    is_code = query.isdigit()
+    q = normalize_name(query)
+    parts = [p for p in q.split() if p]
+
+    def score(athlete):
+        name = normalize_name(athlete.get("name", ""))
+        value = 0
+        if q == name:
+            value += 100
+        if q in name:
+            value += 60
+        if parts and all(p in name for p in parts):
+            value += 40
+        if is_code and athlete.get("fis_code") == query:
+            value += 140
+        return value
+
+    for link in unique_links[:25]:
         try:
             athlete = fetch_profile(link)
         except Exception:
             continue
+
         unique_key = (
             athlete.get("name", "").strip().lower(),
             athlete.get("fis_code", "").strip(),
@@ -252,23 +388,18 @@ def search_athletes(query: str):
         if unique_key in seen:
             continue
         seen.add(unique_key)
+        athlete["score"] = score(athlete)
         athletes.append(athlete)
-    q = normalize_name(query)
-    parts = [p for p in q.split() if p]
-    def score(a):
-        name = normalize_name(a.get("name", ""))
-        value = 0
-        if q == name:
-            value += 100
-        if q in name:
-            value += 60
-        if all(p in name for p in parts):
-            value += 40
-        if query.isdigit() and a.get("fis_code") == query:
-            value += 120
-        return value
-    athletes.sort(key=score, reverse=True)
-    return athletes
+
+    athletes.sort(key=lambda a: a.get("score", 0), reverse=True)
+
+    if is_code:
+        exact = [a for a in athletes if a.get("fis_code") == query]
+        if exact:
+            return exact[:12]
+
+    return athletes[:12]
+
 
 def metric_card(label: str, value: str):
     st.markdown(
@@ -276,11 +407,13 @@ def metric_card(label: str, value: str):
         unsafe_allow_html=True,
     )
 
+
 def kpi_card(label: str, value: str):
     st.markdown(
         f'<div class="kpi"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div></div>',
         unsafe_allow_html=True,
     )
+
 
 if "results" not in st.session_state:
     st.session_state.results = []
@@ -297,12 +430,12 @@ with st.sidebar:
         label_visibility="collapsed",
     )
     st.markdown("---")
-    st.caption("Die App hat jetzt eine moderne Struktur. Weitere Analyse-Module können direkt darauf aufbauen.")
+    st.caption("Die App hat jetzt den modernen Aufbau aus v3 und die robustere Suchlogik aus der funktionierenden Version.")
 
 st.markdown('<div class="header-wrap">', unsafe_allow_html=True)
-c1, c2, c3 = st.columns([2.2, 4.6, 0.8])
+c1, c2, c3 = st.columns([2.4, 4.8, 0.8])
 with c1:
-    q_col, b_col = st.columns([3.2, 1.35])
+    q_col, b_col = st.columns([3.2, 1.4])
     with q_col:
         search_query = st.text_input("", placeholder="Athlet oder FIS-Code suchen…", label_visibility="collapsed")
     with b_col:
@@ -313,7 +446,10 @@ with c2:
         unsafe_allow_html=True,
     )
 with c3:
-    st.markdown(f'<div style="text-align:right; color:#9bb0d3; padding-top:0.65rem;">{APP_VERSION}</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="text-align:right; color:#9bb0d3; padding-top:0.65rem;">{APP_VERSION}</div>',
+        unsafe_allow_html=True,
+    )
 st.markdown('</div>', unsafe_allow_html=True)
 
 if search_button:
@@ -331,6 +467,7 @@ selected_athlete = results[st.session_state.selected_index] if results else None
 
 if st.session_state.active_view == "Dashboard":
     left, right = st.columns([1.05, 2.15])
+
     with left:
         st.markdown('<div class="section-title">Trefferliste</div>', unsafe_allow_html=True)
         if not results:
@@ -341,11 +478,12 @@ if st.session_state.active_view == "Dashboard":
                 "Treffer auswählen",
                 options=list(range(len(labels))),
                 format_func=lambda i: labels[i],
-                index=min(st.session_state.selected_index, len(labels)-1),
+                index=min(st.session_state.selected_index, len(labels) - 1),
                 label_visibility="collapsed",
             )
             st.session_state.selected_index = idx
             selected_athlete = results[idx]
+
     with right:
         if not selected_athlete:
             st.info("Sobald ein Athlet gefunden wird, erscheint hier das Dashboard.")
@@ -399,6 +537,7 @@ elif st.session_state.active_view == "Athletenprofil":
             '</div>'
         )
         st.markdown(hero, unsafe_allow_html=True)
+
         metrics = [
             ("Nation", selected_athlete["nation"]),
             ("FIS-Code", selected_athlete["fis_code"]),
@@ -411,7 +550,7 @@ elif st.session_state.active_view == "Athletenprofil":
         ]
         for start in range(0, len(metrics), 4):
             cols = st.columns(4)
-            for col, (label, value) in zip(cols, metrics[start:start+4]):
+            for col, (label, value) in zip(cols, metrics[start:start + 4]):
                 with col:
                     metric_card(label, value)
         st.link_button("FIS-Profil öffnen", selected_athlete["url"])

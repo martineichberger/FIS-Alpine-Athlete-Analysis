@@ -1,11 +1,9 @@
 # FIS-Alpine-Athlete-Analysis
 
-Moderne Streamlit-Version mit:
-- dunkelblauer Header-Bar
-- Suchfeld links + Suchbutton direkt daneben
-- zentriertem App-Titel
-- Sidebar-Navigation
-- Dashboard-Struktur für weitere Analyse-Module
+Version v3.1 kombiniert:
+- den modernen Header- und Dashboard-Aufbau
+- die robustere Athletensuche über die FIS-Biography-Suche
+- einen Fallback über DuckDuckGo, falls FIS keine Trefferliste liefert
 
 ## Lokal starten
 ```bash
