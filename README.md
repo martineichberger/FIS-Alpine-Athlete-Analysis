@@ -1,70 +1,32 @@
+# FIS-Alpine-Athlete-Analysis
 
-# ⛷️ FIS-Alpine-Athlete-Analysis
+Robustere Streamlit-Version für GitHub und Streamlit Community Cloud.
 
-![Streamlit](https://img.shields.io/badge/Built%20with-Streamlit-red)
-![Python](https://img.shields.io/badge/Python-3.9+-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+## Was in v2 verbessert wurde
+- Direkte Suche über die FIS-Biography-Suche
+- Suche per **Name** oder **FIS-Code**
+- Ergebnisliste mit Auswahl
+- Robusteres Matching
+- Fallback-Suche, falls die direkte Ergebnisliste leer bleibt
 
-Web application for **analyzing alpine ski athletes** using the FIS database.
+## Dateien
+- `streamlit_app.py` – Streamlit-App
+- `requirements.txt` – Abhängigkeiten
+- `README.md` – Projektbeschreibung
+- `.gitignore` – sinnvolle Git-Regeln
 
----
-
-## 🚀 Live Demo
-
-Deploy easily using **Streamlit Community Cloud**.
-
----
-
-## 📸 Screenshot
-
-![App Screenshot](assets/screenshot.png)
-
----
-
-## 🔍 Features
-
-- Search alpine athletes by **name**
-- Search athletes by **FIS Code**
-- Athlete profile overview
-- Designed for **coaches, analysts and ski teams**
-
----
-
-## 🛠 Installation
-
+## Lokal starten
 ```bash
-git clone https://github.com/YOUR_USERNAME/FIS-Alpine-Athlete-Analysis.git
-cd FIS-Alpine-Athlete-Analysis
 pip install -r requirements.txt
 streamlit run streamlit_app.py
 ```
 
----
+## Deployment auf Streamlit Community Cloud
+1. Repository auf GitHub anlegen
+2. Alle Dateien hochladen
+3. In Streamlit Community Cloud das Repository auswählen
+4. `streamlit_app.py` als Main file setzen
+5. Deploy starten
 
-## ☁️ Deploy on Streamlit Cloud
-
-1. Push repo to **GitHub**
-2. Go to **share.streamlit.io**
-3. Select repository
-4. Main file: `streamlit_app.py`
-5. Deploy 🚀
-
----
-
-## 📂 Project Structure
-
-```
-FIS-Alpine-Athlete-Analysis
-│
-├── streamlit_app.py
-├── requirements.txt
-├── README.md
-└── assets/
-    └── screenshot.png
-```
-
----
-
-## 📄 License
-
-MIT License
+## Hinweis
+Die App ist bewusst auf Streamlit + GitHub optimiert und benötigt keine PyQt-Desktop-Komponenten.
