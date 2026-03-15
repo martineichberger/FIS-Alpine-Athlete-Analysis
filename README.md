@@ -1,16 +1,12 @@
 # FIS-Alpine-Athlete-Analysis
 
-Version v4.1 erweitert den Reiter **Athletendaten**.
+Version v4.2 erweitert den Reiter **Ergebnisse**.
 
-Direkt aus der FIS-Athletenseite werden nun ausgelesen:
-- Nachname
-- Vorname
-- Geburtsdatum
-- Nation
-- Nationenflagge
-- Alter
-- Geschlecht
-- Verein
+Neu:
+- liest die FIS-Ergebnisseite mit `type=result`
+- Saison-Auswahl oder Gesamtstatistik
+- Anzahl der Starts pro Disziplin
+- Ergebnisübersicht als Tabelle
 
 Lokal starten:
 ```bash

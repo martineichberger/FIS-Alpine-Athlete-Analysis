@@ -1,5 +1,6 @@
 import html
 import re
+from datetime import datetime
 from urllib.parse import urlencode
 
 import pandas as pd
@@ -7,7 +8,7 @@ import requests
 import streamlit as st
 
 APP_NAME = "FIS-Alpine-Athlete-Analysis"
-APP_VERSION = "v4.1-streamlit"
+APP_VERSION = "v4.2-streamlit"
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -17,6 +18,28 @@ TIMEOUT = 25
 FIS_SEARCH_URL = "https://www.fis-ski.com/DB/general/biographies.html"
 FIS_PROFILE_PREFIX = "https://www.fis-ski.com"
 DUCKDUCKGO_HTML = "https://html.duckduckgo.com/html/"
+
+DISCIPLINES = [
+    "Team Combined",
+    "Alpine Combined",
+    "Giant Slalom",
+    "Super G",
+    "Downhill",
+    "Slalom",
+]
+CATEGORY_LABELS = [
+    "World Championships",
+    "World Cup",
+    "European Cup",
+    "South American Cup",
+    "National Championships",
+    "National Junior Championships",
+    "National Junior Race",
+    "Training",
+    "FIS",
+    "CIT",
+    "University",
+]
 
 st.set_page_config(
     page_title=APP_NAME,
@@ -35,9 +58,7 @@ st.markdown(
             --muted: #64748b;
             --card: #ffffff;
         }
-        .stApp {
-            background: #ffffff;
-        }
+        .stApp { background: #ffffff; }
         [data-testid="stSidebar"] {
             background: #ffffff;
             border-right: 1px solid var(--line);
@@ -323,19 +344,15 @@ def split_name(title_name: str):
     title_name = re.sub(r"\s+", " ", (title_name or "").strip())
     if not title_name:
         return "-", "-"
-
     parts = title_name.split()
     uppercase_parts = [p for p in parts if p.isupper()]
-
     if uppercase_parts:
         last_name = " ".join(uppercase_parts)
         first_name = " ".join([p for p in parts if not p.isupper()]).strip()
         if first_name:
             return last_name, first_name
-
     if len(parts) >= 2:
         return parts[-1], " ".join(parts[:-1])
-
     return title_name, "-"
 
 
@@ -345,20 +362,17 @@ def extract_nation_from_page(page: str, clean_page: str):
         code = code_match.group(1).strip()
         name = code_match.group(2).strip()
         return code, name
-
     text_match = re.search(r"\b([A-Z]{3})\s+([A-Z][a-zA-Z\-]+(?:\s+[A-Z][a-zA-Z\-]+)?)\b", clean_page)
     if text_match:
         code = text_match.group(1).strip()
         name = text_match.group(2).strip()
         return code, name
-
     nation_label = extract_value(clean_page, "Nation")
     if nation_label and nation_label != "-":
         parts = nation_label.split(" ", 1)
         if len(parts) == 2 and len(parts[0]) == 3 and parts[0].isalpha():
             return parts[0].upper(), parts[1].strip()
         return "-", nation_label.strip()
-
     return "-", "-"
 
 
@@ -379,9 +393,9 @@ def fetch_profile(url: str):
 
     nation_code, nation_name = extract_nation_from_page(page, clean_page)
     nation_flag = country_code_to_flag(nation_code)
+
     club = extract_value(clean_page, "Club")
     if club == "-":
-        # fallback: often the club appears directly below the h1
         club_match = re.search(r"</h1>\s*([^<]{3,120})<", page, re.IGNORECASE | re.DOTALL)
         if club_match:
             club_candidate = clean_html(club_match.group(1))
@@ -480,54 +494,129 @@ def search_athletes(query: str):
     return athletes[:12]
 
 
-@st.cache_data(ttl=900, show_spinner=False)
-def fetch_recent_results(athlete_url: str):
-    session = get_session()
-    r = session.get(athlete_url, timeout=TIMEOUT)
-    r.raise_for_status()
-    tables = pd.read_html(r.text)
-    frames = []
-    for df in tables:
-        cols = [str(c).strip() for c in df.columns]
-        low = " | ".join(cols).lower()
-        if any(k in low for k in ["date", "place", "event", "discipline", "rank", "result", "points"]):
-            df.columns = cols
-            frames.append(df)
-    if not frames:
+def results_url_from_profile(athlete_url: str) -> str:
+    if "type=result" in athlete_url:
+        return athlete_url
+    if "?" in athlete_url:
+        return athlete_url + "&type=result"
+    return athlete_url + "?type=result"
+
+
+def compute_season(date_str: str):
+    try:
+        dt = datetime.strptime(date_str, "%d-%m-%Y")
+    except Exception:
         return None
-    results = pd.concat(frames, ignore_index=True).dropna(how="all")
-    wanted = []
-    for col in results.columns:
-        low = col.lower()
-        if any(k in low for k in ["date", "place", "event", "discipline", "rank", "result", "points", "nation"]):
-            wanted.append(col)
-    if wanted:
-        results = results[wanted]
-    return results.head(25)
+    return dt.year + 1 if dt.month >= 7 else dt.year
+
+
+def parse_result_anchor_text(text: str):
+    text = re.sub(r"\s+", " ", text).strip()
+    if not re.match(r"^\d{2}-\d{2}-\d{4}\s", text):
+        return None
+
+    date_str = text[:10]
+    discipline = "-"
+    discipline_pos = -1
+    for d in DISCIPLINES:
+        pos = text.rfind(d)
+        if pos > discipline_pos:
+            discipline = d
+            discipline_pos = pos
+
+    if discipline_pos == -1:
+        return None
+
+    rest_after_discipline = text[discipline_pos + len(discipline):].strip()
+    rest_tokens = rest_after_discipline.split()
+
+    position = rest_tokens[0] if rest_tokens else "-"
+    fis_points = "-"
+    cup_points = "-"
+
+    if len(rest_tokens) >= 2 and re.match(r"^\d+(\.\d+)?$", rest_tokens[1]):
+        fis_points = rest_tokens[1]
+    if len(rest_tokens) >= 3 and re.match(r"^\d+(\.\d+)?$", rest_tokens[2]):
+        cup_points = rest_tokens[2]
+
+    category = "-"
+    for cat in CATEGORY_LABELS:
+        if cat in text:
+            category = cat
+            break
+
+    nation = "-"
+    nation_match = re.search(r"\b([A-Z]{3})\b", text[10:])
+    if nation_match:
+        nation = nation_match.group(1)
+
+    season = compute_season(date_str)
+
+    return {
+        "Datum": date_str,
+        "Saison": season if season is not None else "-",
+        "Disziplin": discipline,
+        "Kategorie": category,
+        "Nation": nation,
+        "Position": position,
+        "FIS-Punkte": fis_points,
+        "Cup-Punkte": cup_points,
+        "Raw": text,
+    }
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_result_entries(athlete_url: str):
+    url = results_url_from_profile(athlete_url)
+    session = get_session()
+    r = session.get(url, timeout=TIMEOUT)
+    r.raise_for_status()
+    page = r.text
+
+    anchors = re.findall(r"<a[^>]*>(.*?)</a>", page, flags=re.IGNORECASE | re.DOTALL)
+    entries = []
+    seen = set()
+
+    for anchor in anchors:
+        clean_text = clean_html(anchor)
+        parsed = parse_result_anchor_text(clean_text)
+        if not parsed:
+            continue
+        key = (parsed["Datum"], parsed["Disziplin"], parsed["Position"], parsed["Raw"])
+        if key in seen:
+            continue
+        seen.add(key)
+        entries.append(parsed)
+
+    if not entries:
+        return None
+
+    df = pd.DataFrame(entries)
+    return df.sort_values("Datum", ascending=False).reset_index(drop=True)
 
 
 def summarize_results(df: pd.DataFrame):
     if df is None or df.empty:
         return {"starts": "0", "top10": "-", "best": "-", "disciplines": "-"}
     starts = len(df)
-    best = "-"
-    top10 = "-"
-    rank_col = None
-    for col in df.columns:
-        if "rank" in col.lower() or "place" in col.lower():
-            rank_col = col
-            break
-    if rank_col:
-        numeric = pd.to_numeric(df[rank_col], errors="coerce")
-        if numeric.notna().any():
-            best = str(int(numeric.min()))
-            top10 = str(int((numeric <= 10).sum()))
-    disc_cols = [c for c in df.columns if "discipline" in c.lower() or "event" in c.lower()]
-    disciplines = "-"
-    if disc_cols:
-        vals = df[disc_cols[0]].dropna().astype(str).head(5).tolist()
-        disciplines = ", ".join(vals[:3]) if vals else "-"
-    return {"starts": str(starts), "top10": top10, "best": best, "disciplines": disciplines}
+    numeric = pd.to_numeric(df["Position"], errors="coerce")
+    best = str(int(numeric.min())) if numeric.notna().any() else "-"
+    top10 = str(int((numeric <= 10).sum())) if numeric.notna().any() else "-"
+    disciplines = ", ".join(df["Disziplin"].dropna().astype(str).unique()[:3]) if "Disziplin" in df else "-"
+    return {"starts": str(starts), "top10": top10, "best": best, "disciplines": disciplines or "-"}
+
+
+def starts_by_discipline(df: pd.DataFrame):
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["Disziplin", "Starts"])
+    summary = (
+        df.groupby("Disziplin", dropna=False)
+        .size()
+        .reset_index(name="Starts")
+        .sort_values(["Starts", "Disziplin"], ascending=[False, True])
+        .reset_index(drop=True)
+    )
+    return summary
 
 
 def metric_card(label: str, value: str):
@@ -573,7 +662,7 @@ with st.sidebar:
         label_visibility="collapsed",
     )
     st.markdown("---")
-    st.markdown('<div class="nav-caption">Die Athletendaten werden direkt von der jeweiligen FIS-Athletenseite gelesen.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="nav-caption">Die Ergebnisse werden aus der FIS-Ergebnisseite mit <code>type=result</code> gelesen und saisonweise ausgewertet.</div>', unsafe_allow_html=True)
 
 if search_button:
     if not search_query.strip():
@@ -619,7 +708,6 @@ with right:
                 '</div>'
             )
             st.markdown(hero, unsafe_allow_html=True)
-
             row1 = st.columns(4)
             summary = [
                 ("Nachname", selected_athlete["last_name"]),
@@ -649,7 +737,7 @@ with right:
         if not selected_athlete:
             st.info("Suche zuerst einen Athleten.")
         else:
-            st.markdown('<div class="panel-note">Dieses Modul ist als klarer Platzhalter für die spätere Rennauswertung vorbereitet. Hier können später Split-Zeiten, Platzierungsanalyse und Fehlerbilder ergänzt werden.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="panel-note">Dieses Modul ist als klarer Platzhalter für die spätere Rennauswertung vorbereitet.</div>', unsafe_allow_html=True)
 
     elif st.session_state.active_view == "FIS-Punkte":
         st.markdown('<div class="content-title">FIS-Punkte</div>', unsafe_allow_html=True)
@@ -667,27 +755,48 @@ with right:
                 f'<div class="mini-card"><strong>{selected_athlete["name"]}</strong><br>{selected_athlete["nation_flag"]} {selected_athlete["nation_name"]} | FIS-Code {selected_athlete["fis_code"]}</div>',
                 unsafe_allow_html=True,
             )
+
             try:
-                results_df = fetch_recent_results(selected_athlete["url"])
+                results_df = fetch_result_entries(selected_athlete["url"])
             except Exception as exc:
                 results_df = None
                 st.warning(f"Ergebnisse konnten nicht geladen werden: {exc}")
 
-            summary = summarize_results(results_df)
-            s1, s2, s3, s4 = st.columns(4)
-            with s1:
-                kpi_card("Erkannte Starts", summary["starts"])
-            with s2:
-                kpi_card("Top 10", summary["top10"])
-            with s3:
-                kpi_card("Beste Platzierung", summary["best"])
-            with s4:
-                kpi_card("Disziplinen", summary["disciplines"])
-
             if results_df is None or results_df.empty:
-                st.info("Auf der Profilseite konnte keine direkt auslesbare Ergebnis-Tabelle gefunden werden.")
+                st.info("Auf der Ergebnisseite konnten keine auslesbaren Resultate gefunden werden.")
             else:
-                st.markdown('<div class="panel-note">Die untenstehende Tabelle wurde direkt aus der Athletenseite erkannt und für die App zusammengeführt.</div>', unsafe_allow_html=True)
-                st.dataframe(results_df, use_container_width=True, hide_index=True)
+                seasons = results_df["Saison"].dropna().astype(str).unique().tolist()
+                seasons = sorted(seasons, reverse=True)
+                season_options = ["Gesamtstatistik"] + seasons
+                selected_season = st.selectbox("Saison wählen", season_options)
 
-st.markdown('<div class="footer-note">Die Athletendaten werden direkt aus der FIS-Athletenseite gelesen. Getestete Felder auf der Beispielseite: Name, Nation, Geburtsdatum, Alter, Geschlecht und Verein.</div>', unsafe_allow_html=True)
+                filtered_df = results_df.copy()
+                if selected_season != "Gesamtstatistik":
+                    filtered_df = filtered_df[filtered_df["Saison"].astype(str) == selected_season].copy()
+
+                summary = summarize_results(filtered_df)
+                s1, s2, s3, s4 = st.columns(4)
+                with s1:
+                    kpi_card("Starts", summary["starts"])
+                with s2:
+                    kpi_card("Top 10", summary["top10"])
+                with s3:
+                    kpi_card("Beste Platzierung", summary["best"])
+                with s4:
+                    kpi_card("Disziplinen", summary["disciplines"])
+
+                st.markdown('<div class="panel-note">Die Starts pro Disziplin werden aus der FIS-Ergebnisseite dieser Saison oder über alle Saisonen zusammengefasst.</div>', unsafe_allow_html=True)
+
+                discipline_summary = starts_by_discipline(filtered_df)
+                col_a, col_b = st.columns([1, 2])
+                with col_a:
+                    st.markdown("**Starts pro Disziplin**")
+                    st.dataframe(discipline_summary, use_container_width=True, hide_index=True)
+                with col_b:
+                    st.markdown("**Resultatübersicht**")
+                    display_cols = [c for c in ["Datum", "Saison", "Disziplin", "Kategorie", "Nation", "Position", "FIS-Punkte", "Cup-Punkte"] if c in filtered_df.columns]
+                    st.dataframe(filtered_df[display_cols], use_container_width=True, hide_index=True)
+
+                st.link_button("Offizielle FIS-Ergebnisseite öffnen", results_url_from_profile(selected_athlete["url"]))
+
+st.markdown('<div class="footer-note">Der Ergebnisse-Bereich nutzt die FIS-Ergebnisseite mit saisonweiser Auswahl oder Gesamtstatistik.</div>', unsafe_allow_html=True)
