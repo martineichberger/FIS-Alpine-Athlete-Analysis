@@ -1,6 +1,10 @@
+import hashlib
 import html
+import json
 import re
+import time
 from datetime import datetime
+from pathlib import Path
 from urllib.parse import urlencode
 
 import pandas as pd
@@ -8,7 +12,7 @@ import requests
 import streamlit as st
 
 APP_NAME = "FIS-Alpine-Athlete-Analysis"
-APP_VERSION = "v5.2-streamlit"
+APP_VERSION = "v5.3-streamlit-cache"
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -18,6 +22,11 @@ TIMEOUT = 25
 FIS_SEARCH_URL = "https://www.fis-ski.com/DB/general/biographies.html"
 FIS_PROFILE_PREFIX = "https://www.fis-ski.com"
 DUCKDUCKGO_HTML = "https://html.duckduckgo.com/html/"
+CACHE_DIR = Path(".cache/fis_app")
+SEARCH_CACHE_TTL = 60 * 60 * 6
+PROFILE_CACHE_TTL = 60 * 60 * 24
+RESULTS_CACHE_TTL = 60 * 60 * 12
+HTTP_CACHE_TTL = 60 * 60 * 6
 
 DISCIPLINES = [
     "Team Combined",
@@ -67,9 +76,6 @@ st.markdown(
         }
         .stApp { background: #ffffff; }
         [data-testid="stSidebar"] { display:none; }
-        .header-shell { background: var(--navy); margin: -1rem -1rem 1rem -1rem; width: calc(100% + 2rem); padding: 0.8rem 1.2rem; border-bottom: 1px solid #274a7f; }
-        .header-title { color: #ffffff; font-size: 1.45rem; font-weight: 800; text-align: center; line-height: 1.2; margin-top: 0.2rem; }
-        .header-version { color: #cddaf0; text-align: right; font-size: 0.9rem; padding-top: 0.35rem; }
         .content-title { color: var(--text); font-size: 1.15rem; font-weight: 800; margin-bottom: 0.75rem; }
         .hero-card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 1rem 1.1rem; margin-bottom: 1rem; box-shadow: 0 2px 14px rgba(16, 32, 56, 0.05); }
         .hero-name { color: var(--text); font-size: 1.65rem; font-weight: 900; line-height: 1.1; }
@@ -99,6 +105,59 @@ def get_session():
     session = requests.Session()
     session.headers.update({"User-Agent": USER_AGENT})
     return session
+
+
+def ensure_cache_dir() -> None:
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def cache_path(namespace: str, key: str) -> Path:
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    return CACHE_DIR / f"{namespace}_{digest}.json"
+
+
+def load_cache(namespace: str, key: str, ttl_seconds: int):
+    ensure_cache_dir()
+    path = cache_path(namespace, key)
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        created_at = float(payload.get("created_at", 0))
+        if time.time() - created_at > ttl_seconds:
+            return None
+        return payload.get("data")
+    except Exception:
+        return None
+
+
+def save_cache(namespace: str, key: str, data):
+    ensure_cache_dir()
+    path = cache_path(namespace, key)
+    payload = {"created_at": time.time(), "data": data}
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+
+def clear_cache_files():
+    ensure_cache_dir()
+    for file_path in CACHE_DIR.glob("*.json"):
+        try:
+            file_path.unlink()
+        except Exception:
+            pass
+
+
+def get_text_with_cache(url: str, ttl_seconds: int = HTTP_CACHE_TTL, params: dict | None = None) -> str:
+    cache_key = json.dumps({"url": url, "params": params or {}}, sort_keys=True)
+    cached = load_cache("http", cache_key, ttl_seconds)
+    if cached:
+        return cached
+    session = get_session()
+    response = session.get(url, params=params, timeout=TIMEOUT)
+    response.raise_for_status()
+    text = response.text
+    save_cache("http", cache_key, text)
+    return text
 
 
 def normalize_name(value: str) -> str:
@@ -231,8 +290,7 @@ def extract_fis_code(page: str, clean_page: str, url: str = "") -> str:
         for pattern in patterns:
             match = re.search(pattern, source, re.IGNORECASE)
             if match:
-                value = match.group(1).strip()
-                value = value.lstrip('?')
+                value = match.group(1).strip().lstrip("?")
                 if value:
                     return value
     fallback = extract_value(clean_page, "FIS Code")
@@ -272,14 +330,10 @@ def split_name(title_name: str):
 def extract_nation_from_page(page: str, clean_page: str):
     code_match = re.search(r">\s*([A-Z]{3})\s+([A-Z][a-zA-Z\-]+(?:\s+[A-Z][a-zA-Z\-]+)?)\s*<", page)
     if code_match:
-        code = code_match.group(1).strip()
-        name = code_match.group(2).strip()
-        return code, name
+        return code_match.group(1).strip(), code_match.group(2).strip()
     text_match = re.search(r"\b([A-Z]{3})\s+([A-Z][a-zA-Z\-]+(?:\s+[A-Z][a-zA-Z\-]+)?)\b", clean_page)
     if text_match:
-        code = text_match.group(1).strip()
-        name = text_match.group(2).strip()
-        return code, name
+        return text_match.group(1).strip(), text_match.group(2).strip()
     nation_label = extract_value(clean_page, "Nation")
     if nation_label and nation_label != "-":
         parts = nation_label.split(" ", 1)
@@ -289,13 +343,12 @@ def extract_nation_from_page(page: str, clean_page: str):
     return "-", "-"
 
 
-@st.cache_data(ttl=900, show_spinner=False)
 def fetch_profile(url: str):
-    session = get_session()
-    r = session.get(url, timeout=TIMEOUT)
-    r.raise_for_status()
-    page = r.text
+    cached = load_cache("profile", url, PROFILE_CACHE_TTL)
+    if cached:
+        return cached
 
+    page = get_text_with_cache(url, ttl_seconds=PROFILE_CACHE_TTL)
     title_match = re.search(r"<h1[^>]*>(.*?)</h1>", page, re.IGNORECASE | re.DOTALL)
     raw_name = clean_html(title_match.group(1)) if title_match else "Unbekannter Athlet"
     last_name, first_name = split_name(raw_name)
@@ -303,7 +356,6 @@ def fetch_profile(url: str):
     competitor_match = re.search(r"competitorid=(\d+)", url, re.IGNORECASE)
     competitor_id = competitor_match.group(1) if competitor_match else "-"
     nation_code, nation_name = extract_nation_from_page(page, clean_page)
-    nation_flag = country_code_to_flag(nation_code)
     club = extract_value(clean_page, "Club")
     if club == "-":
         club_match = re.search(r"</h1>\s*([^<]{3,120})<", page, re.IGNORECASE | re.DOTALL)
@@ -311,13 +363,14 @@ def fetch_profile(url: str):
             club_candidate = clean_html(club_match.group(1))
             if club_candidate and len(club_candidate) <= 80:
                 club = club_candidate
-    return {
+
+    athlete = {
         "name": raw_name,
         "last_name": last_name,
         "first_name": first_name,
         "nation_code": nation_code,
         "nation_name": nation_name,
-        "nation_flag": nation_flag,
+        "nation_flag": country_code_to_flag(nation_code),
         "birthdate": extract_value(clean_page, "Birthdate"),
         "age": extract_age(clean_page),
         "club": club,
@@ -327,20 +380,24 @@ def fetch_profile(url: str):
         "competitor_id": competitor_id,
         "url": url,
     }
+    save_cache("profile", url, athlete)
+    return athlete
 
 
-@st.cache_data(ttl=900, show_spinner=True)
 def search_athletes(query: str):
     query = " ".join(query.split())
     if not query:
         return []
-    session = get_session()
+
+    cached = load_cache("search", query.lower(), SEARCH_CACHE_TTL)
+    if cached is not None:
+        return cached
+
     profile_links = []
     for url in build_fis_search_urls(query):
         try:
-            response = session.get(url, timeout=TIMEOUT)
-            response.raise_for_status()
-            profile_links.extend(extract_profile_links_from_search_page(response.text))
+            page = get_text_with_cache(url, ttl_seconds=SEARCH_CACHE_TTL)
+            profile_links.extend(extract_profile_links_from_search_page(page))
         except Exception:
             pass
 
@@ -351,9 +408,8 @@ def search_athletes(query: str):
                 '"sectorcode=AL" '
                 f'"{query}"'
             )
-            response = session.get(DUCKDUCKGO_HTML, params={"q": ddg_query}, timeout=TIMEOUT)
-            response.raise_for_status()
-            profile_links.extend(extract_profile_links_duckduckgo(response.text))
+            ddg_page = get_text_with_cache(DUCKDUCKGO_HTML, ttl_seconds=SEARCH_CACHE_TTL, params={"q": ddg_query})
+            profile_links.extend(extract_profile_links_duckduckgo(ddg_page))
         except Exception:
             pass
 
@@ -401,8 +457,14 @@ def search_athletes(query: str):
     if is_code:
         exact = [a for a in athletes if str(a.get("fis_code", "")).strip() == query]
         if exact:
-            return exact[:12]
-    return athletes[:12]
+            athletes = exact[:12]
+        else:
+            athletes = athletes[:12]
+    else:
+        athletes = athletes[:12]
+
+    save_cache("search", query.lower(), athletes)
+    return athletes
 
 
 def results_url_from_profile(athlete_url: str) -> str:
@@ -446,11 +508,9 @@ def parse_result_line(text: str):
     after = text[discipline_pos + len(discipline):].strip()
     tokens = after.split()
 
-    position = "-"
+    position = tokens[0] if tokens else "-"
     fis_points = "-"
     cup_points = "-"
-    if tokens:
-        position = tokens[0]
     numeric_tokens = [t for t in tokens[1:] if re.match(r"^\d+(\.\d+)?$", t)]
     if len(numeric_tokens) >= 1:
         fis_points = numeric_tokens[0]
@@ -474,7 +534,6 @@ def parse_result_line(text: str):
             nation = codes[0]
 
     season = compute_season(date_str)
-
     return {
         "Datum": date_str,
         "Saison": season if season is not None else "-",
@@ -488,14 +547,16 @@ def parse_result_line(text: str):
     }
 
 
-@st.cache_data(ttl=900, show_spinner=False)
 def fetch_result_entries(athlete_url: str):
-    url = results_url_from_profile(athlete_url)
-    session = get_session()
-    r = session.get(url, timeout=TIMEOUT)
-    r.raise_for_status()
-    page = r.text
+    cache_key = results_url_from_profile(athlete_url)
+    cached = load_cache("results", cache_key, RESULTS_CACHE_TTL)
+    if cached:
+        df = pd.DataFrame(cached)
+        if not df.empty and "Datum" in df.columns:
+            df["SortDate"] = pd.to_datetime(df["Datum"], format="%d-%m-%Y", errors="coerce")
+        return df
 
+    page = get_text_with_cache(cache_key, ttl_seconds=RESULTS_CACHE_TTL)
     candidates = []
     anchors = re.findall(r"<a[^>]*>(.*?)</a>", page, flags=re.IGNORECASE | re.DOTALL)
     candidates.extend(clean_html(a) for a in anchors)
@@ -520,6 +581,7 @@ def fetch_result_entries(athlete_url: str):
     df = pd.DataFrame(entries)
     df["SortDate"] = pd.to_datetime(df["Datum"], format="%d-%m-%Y", errors="coerce")
     df = df.sort_values(["SortDate", "Disziplin", "Kategorie"], ascending=[False, True, True]).reset_index(drop=True)
+    save_cache("results", cache_key, df.drop(columns=["SortDate"], errors="ignore").to_dict(orient="records"))
     return df
 
 
@@ -582,7 +644,7 @@ st.markdown(
         <div style="font-weight:800;font-size:1.35rem;">{APP_NAME}</div>
         <div style="display:flex;align-items:center;gap:16px;">
             <div style="opacity:0.9;">{APP_VERSION}</div>
-            <div style="background:#1e3a6b;border:none;color:white;font-weight:700;border-radius:8px;padding:6px 10px;">Suche</div>
+            <div style="background:#1e3a6b;border:none;color:white;font-weight:700;border-radius:8px;padding:6px 10px;">Cache aktiv</div>
         </div>
     </div>
     ''',
@@ -629,7 +691,10 @@ with nav_col:
         ["Athletendaten", "Rennauswertung", "FIS-Punkte", "Ergebnisse"],
         label_visibility="collapsed",
     )
-    st.markdown('<div class="nav-caption">Die Athletensuche liegt wieder oberhalb der Navigation und ist direkt nutzbar.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="nav-caption">Such- und Ergebnisdaten werden lokal im Ordner .cache/fis_app zwischengespeichert.</div>', unsafe_allow_html=True)
+    if st.button("Cache leeren"):
+        clear_cache_files()
+        st.success("Lokaler Cache wurde geleert.")
     st.markdown('<div class="content-title" style="margin-top:1rem;">Trefferliste</div>', unsafe_allow_html=True)
     if not results:
         hint = "Noch keine Treffer. Suche oben nach einem Athleten."
@@ -715,8 +780,7 @@ with main_col:
             if results_df is None or results_df.empty:
                 st.info("Auf der Ergebnisseite konnten keine auslesbaren Resultate gefunden werden.")
             else:
-                seasons = results_df["Saison"].dropna().astype(str).unique().tolist()
-                seasons = sorted(seasons, reverse=True)
+                seasons = sorted(results_df["Saison"].dropna().astype(str).unique().tolist(), reverse=True)
                 season_options = ["Gesamtstatistik"] + seasons
                 selected_season = st.selectbox("Saison wählen", season_options)
 
@@ -750,4 +814,4 @@ with main_col:
 
                 st.link_button("Offizielle FIS-Ergebnisseite öffnen", results_url_from_profile(selected_athlete["url"]))
 
-st.markdown('<div class="footer-note">v5.2 repariert die Athletensuche und zeigt den FIS-Code in den Athletendaten wieder zuverlässig an.</div>', unsafe_allow_html=True)
+st.markdown('<div class="footer-note">v5.3 ergänzt eine lokale FIS-Daten-Caching-Lösung, behält die GitHub-Struktur mit README.md, requirements.txt und streamlit_app.py bei und zeigt den FIS-Code weiterhin korrekt an.</div>', unsafe_allow_html=True)

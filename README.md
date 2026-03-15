@@ -1,15 +1,43 @@
 # FIS-Alpine-Athlete-Analysis
 
-Version v4.3 verbessert den Reiter **Ergebnisse**.
+Version **v5.3** ergänzt eine lokale **FIS-Daten-Caching-Lösung** und behält die einfache GitHub-Struktur mit genau diesen drei Dateien bei:
 
-Neu:
-- berücksichtigt alle erkannten Disziplinen, inklusive Giant Slalom
-- genaue chronologische Ergebnisliste
-- Saison-Auswahl oder Gesamtstatistik
-- Starts pro Disziplin
+- `streamlit_app.py`
+- `requirements.txt`
+- `README.md`
 
-Lokal starten:
+## Neu in v5.3
+
+- Athletensuche funktioniert wieder stabil
+- FIS-Code wird in Trefferliste und Detailansicht zuverlässig angezeigt
+- lokale Cache-Lösung für
+  - Athletensuche
+  - FIS-Profile
+  - Ergebnisseiten
+- schnelleres erneutes Laden bereits abgefragter Athleten
+- Button zum Leeren des lokalen Caches direkt in der App
+
+## Cache-Verhalten
+
+Beim Start legt die App automatisch einen lokalen Ordner an:
+
+```bash
+.cache/fis_app
+```
+
+Dort werden Suchergebnisse und FIS-Daten zeitlich begrenzt zwischengespeichert. Dadurch werden wiederholte Anfragen schneller und die FIS-Seiten müssen seltener neu geladen werden.
+
+## Lokal starten
+
 ```bash
 pip install -r requirements.txt
 streamlit run streamlit_app.py
+```
+
+## Für GitHub / Streamlit Cloud
+
+Diese Struktur ist direkt für ein kleines GitHub-Repository geeignet. Als Startdatei verwendest du:
+
+```bash
+streamlit_app.py
 ```
