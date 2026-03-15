@@ -8,7 +8,7 @@ import requests
 import streamlit as st
 
 APP_NAME = "FIS-Alpine-Athlete-Analysis"
-APP_VERSION = "v5.1-streamlit"
+APP_VERSION = "v5.2-streamlit"
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -221,6 +221,24 @@ def extract_age(text: str):
     return match.group(1) if match else "-"
 
 
+def extract_fis_code(page: str, clean_page: str, url: str = "") -> str:
+    patterns = [
+        r"FIS\s*Code\s*:?\s*(-?\d{3,10})\b",
+        r'"fisCode"\s*:\s*"?(-?\d{3,10})"?',
+        r"fiscode=([-?\d]{3,10})\b",
+    ]
+    for source in (page, clean_page, url):
+        for pattern in patterns:
+            match = re.search(pattern, source, re.IGNORECASE)
+            if match:
+                value = match.group(1).strip()
+                value = value.lstrip('?')
+                if value:
+                    return value
+    fallback = extract_value(clean_page, "FIS Code")
+    return fallback if fallback and fallback != "-" else "-"
+
+
 def country_code_to_flag(code: str) -> str:
     code = (code or "").strip().upper()
     if len(code) != 3 or not code.isalpha():
@@ -304,7 +322,7 @@ def fetch_profile(url: str):
         "age": extract_age(clean_page),
         "club": club,
         "gender": extract_value(clean_page, "Gender"),
-        "fis_code": extract_value(clean_page, "FIS Code"),
+        "fis_code": extract_fis_code(page, clean_page, url),
         "status": extract_value(clean_page, "Status"),
         "competitor_id": competitor_id,
         "url": url,
@@ -732,4 +750,4 @@ with main_col:
 
                 st.link_button("Offizielle FIS-Ergebnisseite öffnen", results_url_from_profile(selected_athlete["url"]))
 
-st.markdown('<div class="footer-note">v5.1 repariert die Athletensuche wieder vollständig und behält den verbesserten Ergebnisse-Parser bei.</div>', unsafe_allow_html=True)
+st.markdown('<div class="footer-note">v5.2 repariert die Athletensuche und zeigt den FIS-Code in den Athletendaten wieder zuverlässig an.</div>', unsafe_allow_html=True)
