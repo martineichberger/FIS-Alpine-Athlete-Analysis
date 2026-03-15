@@ -5,14 +5,14 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urljoin, urlparse, parse_qsl, urlunparse
 
 import pandas as pd
 import requests
 import streamlit as st
 
 APP_NAME = "FIS-Alpine-Athlete-Analysis"
-APP_VERSION = "v5.4-results-fix"
+APP_VERSION = "v5.7-season-overview-filters"
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -475,6 +475,98 @@ def results_url_from_profile(athlete_url: str) -> str:
     return athlete_url + "?type=result"
 
 
+RESULTS_CACHE_NAMESPACE = "results_v2"
+
+
+def update_url_query(url: str, updates: dict) -> str:
+    parsed = urlparse(url)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    for key, value in updates.items():
+        if value is None:
+            query.pop(key, None)
+        else:
+            query[key] = str(value)
+    new_query = urlencode(query, doseq=True)
+    return urlunparse(parsed._replace(query=new_query))
+
+
+def normalize_result_url(url: str, base_url: str = "") -> str:
+    candidate = html.unescape((url or "").replace("\\/", "/").replace("&amp;", "&")).strip(' "\'')
+    if not candidate:
+        return ""
+
+    if candidate.startswith("//"):
+        candidate = "https:" + candidate
+    elif candidate.startswith("/"):
+        candidate = urljoin(FIS_PROFILE_PREFIX, candidate)
+    elif not candidate.startswith("http"):
+        candidate = urljoin(base_url or FIS_PROFILE_PREFIX, candidate)
+
+    if "athlete-biography.html" not in candidate:
+        return ""
+    if "type=result" not in candidate.lower():
+        candidate = update_url_query(candidate, {"type": "result"})
+    return candidate
+
+
+def extract_result_page_links(page: str, base_url: str):
+    discovered = []
+
+    href_matches = re.findall(r'href="([^"]+)"', page, flags=re.IGNORECASE)
+    href_matches += re.findall(r"href='([^']+)'", page, flags=re.IGNORECASE)
+    href_matches += re.findall(r'"(https?:[^"]*athlete-biography\.html[^"]*)"', page, flags=re.IGNORECASE)
+    href_matches += re.findall(r'"([^"]*athlete-biography\.html[^"]*)"', page, flags=re.IGNORECASE)
+
+    for raw in href_matches:
+        normalized = normalize_result_url(raw, base_url=base_url)
+        if normalized:
+            discovered.append(normalized)
+
+    return list(dict.fromkeys(discovered))
+
+
+def build_pagination_candidates(base_url: str):
+    candidates = []
+
+    for limit in (50, 100, 200, 500, 1000):
+        candidates.append(update_url_query(base_url, {"limit": limit}))
+
+    for limit in (50, 100, 200):
+        for offset in range(limit, 1201, limit):
+            candidates.append(update_url_query(base_url, {"limit": limit, "offset": offset}))
+            candidates.append(update_url_query(base_url, {"limit": limit, "start": offset}))
+
+    for limit in (50, 100, 200):
+        for page_no in range(2, 16):
+            candidates.append(update_url_query(base_url, {"limit": limit, "page": page_no}))
+            candidates.append(update_url_query(base_url, {"limit": limit, "pageNum": page_no}))
+            candidates.append(update_url_query(base_url, {"limit": limit, "pageNo": page_no}))
+
+    return list(dict.fromkeys(candidates))
+
+
+def merge_result_entries(existing: dict, candidates):
+    added = 0
+    for candidate in candidates:
+        parsed = parse_result_line(candidate)
+        if not parsed:
+            continue
+        key = (
+            parsed["Datum"],
+            parsed["Disziplin"],
+            parsed["Position"],
+            parsed["Nation"],
+            parsed["Rennort"],
+            parsed["Kategorie"],
+            parsed["Raw"][:180],
+        )
+        if key in existing:
+            continue
+        existing[key] = parsed
+        added += 1
+    return added
+
+
 def compute_season(date_str: str):
     try:
         dt = datetime.strptime(date_str, "%d-%m-%Y")
@@ -585,41 +677,136 @@ def parse_result_line(text: str):
     }
 
 
+
+def extract_result_candidates_from_text(source_text: str):
+    if not source_text:
+        return []
+
+    normalized = re.sub(r"\s+", " ", source_text).strip()
+    if not normalized:
+        return []
+
+    candidates = []
+
+    date_positions = [m.start() for m in re.finditer(r"\d{2}-\d{2}-\d{4}", normalized)]
+    for i, start in enumerate(date_positions):
+        end = date_positions[i + 1] if i + 1 < len(date_positions) else min(len(normalized), start + 220)
+        chunk = normalized[start:end].strip(" |,;")
+        if chunk:
+            candidates.append(chunk)
+
+    for match in re.finditer(r"\d{2}-\d{2}-\d{4}", normalized):
+        chunk = normalized[match.start(): match.start() + 220].strip(" |,;")
+        if chunk:
+            candidates.append(chunk)
+
+    return candidates
+
+
+def extract_result_candidates_from_page(page: str):
+    candidates = []
+
+    anchors = re.findall(r"<a[^>]*>(.*?)</a>", page, flags=re.IGNORECASE | re.DOTALL)
+    candidates.extend(clean_html(a) for a in anchors)
+
+    blocks = re.findall(r">(.*?)<", page, flags=re.IGNORECASE | re.DOTALL)
+    candidates.extend(clean_html(b) for b in blocks if re.search(r"\d{2}-\d{2}-\d{4}", clean_html(b)))
+
+    script_blocks = re.findall(r"<script[^>]*>(.*?)</script>", page, flags=re.IGNORECASE | re.DOTALL)
+    for block in script_blocks:
+        if re.search(r"\d{2}-\d{2}-\d{4}", block):
+            candidates.extend(extract_result_candidates_from_text(html.unescape(block)))
+
+    cleaned_page = clean_html(page)
+    candidates.extend(extract_result_candidates_from_text(cleaned_page))
+
+    unescaped_page = html.unescape(page)
+    if re.search(r"\d{2}-\d{2}-\d{4}", unescaped_page):
+        candidates.extend(extract_result_candidates_from_text(clean_html(unescaped_page)))
+        candidates.extend(extract_result_candidates_from_text(unescaped_page))
+
+    deduped = []
+    seen = set()
+    for item in candidates:
+        item = re.sub(r"\s+", " ", str(item)).strip()
+        if len(item) < 18 or not re.search(r"\d{2}-\d{2}-\d{4}", item):
+            continue
+        key = item[:220]
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped
+
+
 def fetch_result_entries(athlete_url: str):
     cache_key = results_url_from_profile(athlete_url)
-    cached = load_cache("results", cache_key, RESULTS_CACHE_TTL)
+    cached = load_cache(RESULTS_CACHE_NAMESPACE, cache_key, RESULTS_CACHE_TTL)
     if cached:
         df = pd.DataFrame(cached)
         if not df.empty and "Datum" in df.columns:
             df["SortDate"] = pd.to_datetime(df["Datum"], format="%d-%m-%Y", errors="coerce")
         return df
 
-    page = get_text_with_cache(cache_key, ttl_seconds=RESULTS_CACHE_TTL)
-    candidates = []
-    anchors = re.findall(r"<a[^>]*>(.*?)</a>", page, flags=re.IGNORECASE | re.DOTALL)
-    candidates.extend(clean_html(a) for a in anchors)
-    blocks = re.findall(r">(.*?)<", page, flags=re.IGNORECASE | re.DOTALL)
-    candidates.extend(clean_html(b) for b in blocks if re.search(r"\d{2}-\d{2}-\d{4}", clean_html(b)))
+    base_url = results_url_from_profile(athlete_url)
+    pages_to_try = []
+    seen_urls = set()
 
-    entries = []
-    seen = set()
-    for text in candidates:
-        parsed = parse_result_line(text)
-        if not parsed:
-            continue
-        key = (parsed["Datum"], parsed["Disziplin"], parsed["Position"], parsed["Raw"])
-        if key in seen:
-            continue
-        seen.add(key)
-        entries.append(parsed)
+    def queue(url: str):
+        normalized = normalize_result_url(url, base_url=base_url)
+        if normalized and normalized not in seen_urls:
+            seen_urls.add(normalized)
+            pages_to_try.append(normalized)
 
+    queue(base_url)
+
+    entries_by_key = {}
+    processed_pages = 0
+    show_more_detected = False
+
+    while pages_to_try and processed_pages < 60:
+        current_url = pages_to_try.pop(0)
+        try:
+            page = get_text_with_cache(current_url, ttl_seconds=RESULTS_CACHE_TTL)
+        except Exception:
+            continue
+
+        processed_pages += 1
+        page_lower = page.lower()
+        if "show more" in page_lower or "showmore" in page_lower:
+            show_more_detected = True
+
+        merge_result_entries(entries_by_key, extract_result_candidates_from_page(page))
+
+        for discovered_url in extract_result_page_links(page, current_url):
+            queue(discovered_url)
+
+        if processed_pages == 1 or show_more_detected:
+            for candidate_url in build_pagination_candidates(base_url):
+                queue(candidate_url)
+
+    entries = list(entries_by_key.values())
     if not entries:
         return None
 
     df = pd.DataFrame(entries)
     df["SortDate"] = pd.to_datetime(df["Datum"], format="%d-%m-%Y", errors="coerce")
-    df = df.sort_values(["SortDate", "Disziplin", "Kategorie"], ascending=[False, True, True]).reset_index(drop=True)
-    save_cache("results", cache_key, df.drop(columns=["SortDate"], errors="ignore").to_dict(orient="records"))
+    df = (
+        df.sort_values(
+            ["SortDate", "Disziplin", "Kategorie", "Rennort"],
+            ascending=[False, True, True, True],
+        )
+        .drop_duplicates(
+            subset=["Datum", "Disziplin", "Kategorie", "Rennort", "Nation", "Position"],
+            keep="first",
+        )
+        .reset_index(drop=True)
+    )
+    save_cache(
+        RESULTS_CACHE_NAMESPACE,
+        cache_key,
+        df.drop(columns=["SortDate"], errors="ignore").to_dict(orient="records"),
+    )
     return df
 
 
@@ -644,6 +831,56 @@ def starts_by_discipline(df: pd.DataFrame):
         .sort_values(["Starts", "Disziplin"], ascending=[False, True])
         .reset_index(drop=True)
     )
+
+
+def get_current_season() -> int:
+    now = datetime.now()
+    return now.year + 1 if now.month >= 7 else now.year
+
+
+def status_rate(df: pd.DataFrame, status: str):
+    if df is None or df.empty or "Position" not in df.columns:
+        return 0, "0.0%"
+    series = df["Position"].fillna("").astype(str).str.strip().str.upper()
+    count = int((series == status.upper()).sum())
+    rate = (count / len(df) * 100) if len(df) else 0
+    return count, f"{rate:.1f}%"
+
+
+def build_season_overview(df: pd.DataFrame, season: int):
+    empty_summary = {
+        "season": str(season),
+        "starts": 0,
+        "discipline_counts": pd.DataFrame(columns=["Disziplin", "Starts"]),
+        "dnf_count": 0,
+        "dnf_rate": "0.0%",
+        "dsq_count": 0,
+        "dsq_rate": "0.0%",
+        "dns_count": 0,
+        "dns_rate": "0.0%",
+    }
+    if df is None or df.empty or "Saison" not in df.columns:
+        return empty_summary
+
+    season_df = df[df["Saison"].astype(str) == str(season)].copy()
+    if season_df.empty:
+        return empty_summary
+
+    dnf_count, dnf_rate = status_rate(season_df, "DNF")
+    dsq_count, dsq_rate = status_rate(season_df, "DSQ")
+    dns_count, dns_rate = status_rate(season_df, "DNS")
+
+    return {
+        "season": str(season),
+        "starts": int(len(season_df)),
+        "discipline_counts": starts_by_discipline(season_df),
+        "dnf_count": dnf_count,
+        "dnf_rate": dnf_rate,
+        "dsq_count": dsq_count,
+        "dsq_rate": dsq_rate,
+        "dns_count": dns_count,
+        "dns_rate": dns_rate,
+    }
 
 
 def metric_card(label: str, value: str):
@@ -784,6 +1021,47 @@ with main_col:
             for col, (label, value) in zip(row2, details):
                 with col:
                     metric_card(label, value)
+
+            try:
+                athlete_results_df = fetch_result_entries(selected_athlete["url"])
+            except Exception as exc:
+                athlete_results_df = None
+                st.warning(f"Saisonüberblick konnte nicht geladen werden: {exc}")
+
+            current_season = get_current_season()
+            season_overview = build_season_overview(athlete_results_df, current_season)
+            st.markdown(
+                f'<div class="panel-note">Saisonüberblick der aktuellen Saison {season_overview["season"]}: Gesamtzahl der Rennen, Starts pro Disziplin sowie DNF-, DSQ- und DNS-Quoten.</div>',
+                unsafe_allow_html=True,
+            )
+
+            o1, o2, o3, o4 = st.columns(4)
+            with o1:
+                kpi_card("Rennen aktuell", str(season_overview["starts"]))
+            with o2:
+                kpi_card("DNF-Quote", f'{season_overview["dnf_count"]} | {season_overview["dnf_rate"]}')
+            with o3:
+                kpi_card("DSQ-Quote", f'{season_overview["dsq_count"]} | {season_overview["dsq_rate"]}')
+            with o4:
+                kpi_card("DNS-Quote", f'{season_overview["dns_count"]} | {season_overview["dns_rate"]}')
+
+            col_overview_a, col_overview_b = st.columns([1, 1])
+            with col_overview_a:
+                st.markdown(f"**Starts pro Disziplin | Saison {season_overview['season']}**")
+                st.dataframe(season_overview["discipline_counts"], use_container_width=True, hide_index=True)
+            with col_overview_b:
+                if athlete_results_df is None or athlete_results_df.empty:
+                    st.info("Für die aktuelle Saison konnten noch keine auslesbaren Ergebnisse geladen werden.")
+                else:
+                    season_df = athlete_results_df[athlete_results_df["Saison"].astype(str) == season_overview["season"]].copy()
+                    display_cols = [c for c in ["Datum", "Disziplin", "Kategorie", "Rennort", "Nation", "Position"] if c in season_df.columns]
+                    if season_df.empty:
+                        st.info(f"Für die Saison {season_overview['season']} wurden aktuell keine Rennen gefunden.")
+                    else:
+                        st.markdown(f"**Letzte Rennen | Saison {season_overview['season']}**")
+                        season_df = season_df.sort_values("SortDate", ascending=False)
+                        st.dataframe(season_df[display_cols].head(12), use_container_width=True, hide_index=True)
+
             st.link_button("Offizielles FIS-Profil öffnen", selected_athlete["url"])
 
     elif st.session_state.active_view == "Rennauswertung":
@@ -819,12 +1097,24 @@ with main_col:
                 st.info("Auf der Ergebnisseite konnten keine auslesbaren Resultate gefunden werden.")
             else:
                 seasons = sorted(results_df["Saison"].dropna().astype(str).unique().tolist(), reverse=True)
-                season_options = ["Gesamtstatistik"] + seasons
-                selected_season = st.selectbox("Saison wählen", season_options)
+                disciplines = sorted(results_df["Disziplin"].dropna().astype(str).unique().tolist())
+                categories = sorted(results_df["Kategorie"].dropna().astype(str).unique().tolist())
+
+                f1, f2, f3 = st.columns(3)
+                with f1:
+                    selected_season = st.selectbox("Saison wählen", ["Gesamtstatistik"] + seasons)
+                with f2:
+                    selected_discipline = st.selectbox("Disziplin filtern", ["Alle Disziplinen"] + disciplines)
+                with f3:
+                    selected_category = st.selectbox("Kategorie filtern", ["Alle Kategorien"] + categories)
 
                 filtered_df = results_df.copy()
                 if selected_season != "Gesamtstatistik":
                     filtered_df = filtered_df[filtered_df["Saison"].astype(str) == selected_season].copy()
+                if selected_discipline != "Alle Disziplinen":
+                    filtered_df = filtered_df[filtered_df["Disziplin"].astype(str) == selected_discipline].copy()
+                if selected_category != "Alle Kategorien":
+                    filtered_df = filtered_df[filtered_df["Kategorie"].astype(str) == selected_category].copy()
 
                 summary = summarize_results(filtered_df)
                 s1, s2, s3, s4 = st.columns(4)
@@ -837,7 +1127,7 @@ with main_col:
                 with s4:
                     kpi_card("Disziplinen", summary["disciplines"])
 
-                st.markdown('<div class="panel-note">Slalom und Giant Slalom werden jetzt sauber getrennt. Zusätzlich wird der Rennort in der Ergebnisliste mit angezeigt. Die Resultate sind exakt chronologisch sortiert: neuestes Rennen zuerst.</div>', unsafe_allow_html=True)
+                st.markdown('<div class="panel-note">Die Ergebnisse sind jetzt direkt nach Saison, Disziplin und Kategorie filterbar. Slalom und Giant Slalom werden sauber getrennt. Zusätzlich wird der Rennort angezeigt und die Ergebnislogik durchsucht weitere Result-URLs, Pagination-Varianten und „Show More“-Bereiche.</div>', unsafe_allow_html=True)
 
                 discipline_summary = starts_by_discipline(filtered_df)
                 col_a, col_b = st.columns([1, 2])
@@ -852,4 +1142,4 @@ with main_col:
 
                 st.link_button("Offizielle FIS-Ergebnisseite öffnen", results_url_from_profile(selected_athlete["url"]))
 
-st.markdown('<div class="footer-note">v5.4 trennt Slalom und Giant Slalom in der Ergebnisanzeige sauber, ergänzt den Rennort und behält die GitHub-Struktur mit README.md, requirements.txt und streamlit_app.py bei.</div>', unsafe_allow_html=True)
+st.markdown('<div class="footer-note">v5.7 ergänzt Filter für Saison, Disziplin und Kategorie in der Ergebnisansicht und zeigt im Reiter Athletendaten einen Saisonüberblick der aktuellen Saison mit Rennen, Starts pro Disziplin sowie DNF-, DSQ- und DNS-Quoten.</div>', unsafe_allow_html=True)

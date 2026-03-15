@@ -1,12 +1,12 @@
 # FIS-Alpine-Athlete-Analysis
 
-Version **v5.3** ergänzt eine lokale **FIS-Daten-Caching-Lösung** und behält die einfache GitHub-Struktur mit genau diesen drei Dateien bei:
+Version **v5.7** ergänzt Filter in der Ergebnisansicht und einen Saisonüberblick der aktuellen Saison direkt im Reiter Athletendaten.
 
 - `streamlit_app.py`
 - `requirements.txt`
 - `README.md`
 
-## Neu in v5.3
+## Neu in v5.7
 
 - Athletensuche funktioniert wieder stabil
 - FIS-Code wird in Trefferliste und Detailansicht zuverlässig angezeigt
@@ -44,5 +44,7 @@ streamlit_app.py
 
 
 Neu:
-- Slalom und Giant Slalom werden sauber getrennt
-- Rennort wird in der Ergebnisliste angezeigt
+- Ergebnisansicht ist jetzt nach Saison, Disziplin und Kategorie filterbar
+- Im Reiter Athletendaten wird ein Saisonüberblick der aktuellen Saison angezeigt
+- Saisonüberblick enthält Gesamtzahl der Rennen, Starts pro Disziplin sowie DNF-, DSQ- und DNS-Quoten
+- robuste Ergebnis-Pagination und Show-More-Logik bleiben erhalten
