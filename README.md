@@ -41,3 +41,8 @@ Diese Struktur ist direkt für ein kleines GitHub-Repository geeignet. Als Start
 ```bash
 streamlit_app.py
 ```
+
+
+Neu:
+- Slalom und Giant Slalom werden sauber getrennt
+- Rennort wird in der Ergebnisliste angezeigt

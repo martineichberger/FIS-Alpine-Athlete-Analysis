@@ -12,7 +12,7 @@ import requests
 import streamlit as st
 
 APP_NAME = "FIS-Alpine-Athlete-Analysis"
-APP_VERSION = "v5.3-streamlit-cache"
+APP_VERSION = "v5.4-results-fix"
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -484,15 +484,50 @@ def compute_season(date_str: str):
 
 
 def extract_discipline(text: str):
-    lower = text.lower()
-    best = None
-    best_pos = -1
-    for d in DISCIPLINES:
-        pos = lower.rfind(d.lower())
-        if pos > best_pos:
-            best = d
-            best_pos = pos
-    return best, best_pos
+    matches = []
+    for d in sorted(DISCIPLINES, key=len, reverse=True):
+        for match in re.finditer(rf"\b{re.escape(d)}\b", text, flags=re.IGNORECASE):
+            matches.append(
+                {
+                    "discipline": d,
+                    "start": match.start(),
+                    "end": match.end(),
+                    "length": len(d),
+                }
+            )
+
+    if not matches:
+        return None, -1
+
+    filtered = []
+    for candidate in matches:
+        enclosed_by_longer = any(
+            other["length"] > candidate["length"]
+            and other["start"] <= candidate["start"]
+            and other["end"] >= candidate["end"]
+            for other in matches
+        )
+        if not enclosed_by_longer:
+            filtered.append(candidate)
+
+    best = max(filtered, key=lambda item: (item["start"], item["length"]))
+    return best["discipline"], best["start"]
+
+
+def extract_location(before_disc: str, category: str, nation: str) -> str:
+    cleaned = before_disc.strip()
+
+    if nation and nation != "-":
+        cleaned = re.sub(rf"\b{re.escape(nation)}\b", " ", cleaned)
+
+    if category and category != "-":
+        cleaned = re.sub(re.escape(category), " ", cleaned, flags=re.IGNORECASE)
+
+    cleaned = re.sub(r"\b\d{1,2}\b", " ", cleaned)
+    cleaned = re.sub(r"\s*[|,/\-]\s*", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" -|,;/")
+
+    return cleaned if cleaned else "-"
 
 
 def parse_result_line(text: str):
@@ -524,21 +559,24 @@ def parse_result_line(text: str):
             break
 
     nation = "-"
-    before_disc = text[10:discipline_pos]
-    codes = re.findall(r"\b([A-Z]{3})\b", before_disc)
-    if codes:
-        nation = codes[-1]
+    before_disc = text[10:discipline_pos].strip()
+    code_matches = list(re.finditer(r"\b([A-Z]{3})\b", before_disc))
+    if code_matches:
+        nation = code_matches[-1].group(1)
     else:
-        codes = re.findall(r"\b([A-Z]{3})\b", text[10:])
-        if codes:
-            nation = codes[0]
+        fallback_codes = re.findall(r"\b([A-Z]{3})\b", text[10:])
+        if fallback_codes:
+            nation = fallback_codes[0]
 
+    location = extract_location(before_disc, category, nation)
     season = compute_season(date_str)
+
     return {
         "Datum": date_str,
         "Saison": season if season is not None else "-",
         "Disziplin": discipline,
         "Kategorie": category,
+        "Rennort": location,
         "Nation": nation,
         "Position": position,
         "FIS-Punkte": fis_points,
@@ -799,7 +837,7 @@ with main_col:
                 with s4:
                     kpi_card("Disziplinen", summary["disciplines"])
 
-                st.markdown('<div class="panel-note">Alle erkannten Disziplinen werden berücksichtigt. Die Resultate sind exakt chronologisch sortiert: neuestes Rennen zuerst.</div>', unsafe_allow_html=True)
+                st.markdown('<div class="panel-note">Slalom und Giant Slalom werden jetzt sauber getrennt. Zusätzlich wird der Rennort in der Ergebnisliste mit angezeigt. Die Resultate sind exakt chronologisch sortiert: neuestes Rennen zuerst.</div>', unsafe_allow_html=True)
 
                 discipline_summary = starts_by_discipline(filtered_df)
                 col_a, col_b = st.columns([1, 2])
@@ -808,10 +846,10 @@ with main_col:
                     st.dataframe(discipline_summary, use_container_width=True, hide_index=True)
                 with col_b:
                     st.markdown("**Chronologische Ergebnisliste**")
-                    display_cols = [c for c in ["Datum", "Saison", "Disziplin", "Kategorie", "Nation", "Position", "FIS-Punkte", "Cup-Punkte"] if c in filtered_df.columns]
+                    display_cols = [c for c in ["Datum", "Saison", "Disziplin", "Kategorie", "Rennort", "Nation", "Position", "FIS-Punkte", "Cup-Punkte"] if c in filtered_df.columns]
                     chron_df = filtered_df.sort_values("SortDate", ascending=False).copy()
                     st.dataframe(chron_df[display_cols], use_container_width=True, hide_index=True)
 
                 st.link_button("Offizielle FIS-Ergebnisseite öffnen", results_url_from_profile(selected_athlete["url"]))
 
-st.markdown('<div class="footer-note">v5.3 ergänzt eine lokale FIS-Daten-Caching-Lösung, behält die GitHub-Struktur mit README.md, requirements.txt und streamlit_app.py bei und zeigt den FIS-Code weiterhin korrekt an.</div>', unsafe_allow_html=True)
+st.markdown('<div class="footer-note">v5.4 trennt Slalom und Giant Slalom in der Ergebnisanzeige sauber, ergänzt den Rennort und behält die GitHub-Struktur mit README.md, requirements.txt und streamlit_app.py bei.</div>', unsafe_allow_html=True)
