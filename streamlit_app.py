@@ -7,7 +7,7 @@ import streamlit as st
 import pandas as pd
 
 APP_NAME = "FIS-Alpine-Athlete-Analysis"
-APP_VERSION = "v3.2-streamlit"
+APP_VERSION = "v4.0-streamlit"
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -28,149 +28,189 @@ st.set_page_config(
 st.markdown(
     """
     <style>
+        :root {
+            --navy: #102649;
+            --navy-2: #173865;
+            --line: #d8e1ef;
+            --text: #102038;
+            --muted: #64748b;
+            --white: #ffffff;
+            --card: #ffffff;
+            --accent: #1f6feb;
+        }
+
         .stApp {
-            background: linear-gradient(180deg, #08101d 0%, #0b1220 100%);
+            background: #ffffff;
         }
-        .header-wrap {
-            background: linear-gradient(90deg,#0f1b33 0%, #162a52 100%);
-            border: 1px solid #23375a;
-            border-radius: 20px;
-            padding: 14px 18px;
-            margin-bottom: 18px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+
+        [data-testid="stSidebar"] {
+            background: #ffffff;
+            border-right: 1px solid var(--line);
         }
-        .app-title {
-            font-size: 1.95rem;
+
+        .header-shell {
+            background: var(--navy);
+            margin: -1rem -1rem 1rem -1rem;
+            padding: 0.8rem 1.2rem;
+            border-bottom: 1px solid #274a7f;
+        }
+
+        .header-title {
+            color: #ffffff;
+            font-size: 1.45rem;
             font-weight: 800;
             text-align: center;
-            color: #e6eefc;
-            letter-spacing: 0.3px;
             line-height: 1.2;
-            margin-top: 0.15rem;
+            margin-top: 0.2rem;
         }
-        .app-subtitle {
-            text-align: center;
-            color: #95a8c9;
-            font-size: 0.95rem;
-            margin-top: 0.25rem;
+
+        .header-version {
+            color: #cddaf0;
+            text-align: right;
+            font-size: 0.9rem;
+            padding-top: 0.35rem;
         }
-        .section-title {
+
+        .content-title {
+            color: var(--text);
             font-size: 1.15rem;
             font-weight: 800;
-            margin-bottom: 0.6rem;
+            margin-bottom: 0.75rem;
         }
-        .metric-card {
-            background: linear-gradient(180deg, #0f1b33 0%, #101a2d 100%);
-            border: 1px solid #23375a;
+
+        .hero-card {
+            background: var(--card);
+            border: 1px solid var(--line);
             border-radius: 18px;
-            padding: 14px 14px 12px 14px;
-            margin-bottom: 0.85rem;
-            min-height: 94px;
+            padding: 1rem 1.1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 14px rgba(16, 32, 56, 0.05);
         }
+
+        .hero-name {
+            color: var(--text);
+            font-size: 1.65rem;
+            font-weight: 900;
+            line-height: 1.1;
+        }
+
+        .hero-meta {
+            color: var(--muted);
+            font-size: 0.95rem;
+            margin-top: 0.35rem;
+        }
+
+        .metric-card {
+            background: #ffffff;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 0.9rem 1rem;
+            margin-bottom: 0.8rem;
+            min-height: 92px;
+            box-shadow: 0 2px 10px rgba(16, 32, 56, 0.04);
+        }
+
         .metric-label {
-            color: #95a8c9;
-            font-size: 0.78rem;
-            margin-bottom: 0.25rem;
+            color: var(--muted);
+            font-size: 0.76rem;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.4px;
+            margin-bottom: 0.25rem;
         }
+
         .metric-value {
-            color: #e6eefc;
-            font-size: 1.02rem;
+            color: var(--text);
+            font-size: 1rem;
             font-weight: 800;
             line-height: 1.25;
             word-break: break-word;
         }
-        .hero-card {
-            background: linear-gradient(180deg, #0e1a31 0%, #0f1b33 100%);
-            border: 1px solid #23375a;
-            border-radius: 22px;
-            padding: 18px;
-            margin-bottom: 1rem;
-        }
-        .hero-name {
-            color: #e6eefc;
-            font-size: 1.8rem;
-            font-weight: 900;
-            line-height: 1.15;
-        }
-        .hero-meta {
-            color: #95a8c9;
-            font-size: 0.97rem;
-            margin-top: 0.45rem;
-        }
-        .mini-card {
-            background: #0d172a;
-            border: 1px solid #23375a;
-            border-radius: 16px;
-            padding: 12px;
-            min-height: 88px;
-            margin-bottom: 0.75rem;
-        }
+
         .kpi {
-            background: linear-gradient(180deg, #122243 0%, #0d172b 100%);
-            border: 1px solid #23375a;
-            border-radius: 18px;
-            padding: 14px;
+            background: #f7f9fc;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 0.9rem 1rem;
             margin-bottom: 0.8rem;
         }
+
         .kpi-label {
-            color: #95a8c9;
-            font-size: 0.78rem;
+            color: var(--muted);
+            font-size: 0.76rem;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.4px;
         }
+
         .kpi-value {
-            color: #e6eefc;
-            font-size: 1.35rem;
+            color: var(--text);
+            font-size: 1.3rem;
             font-weight: 900;
-            margin-top: 0.25rem;
+            margin-top: 0.2rem;
         }
+
+        .panel-note {
+            background: #f8fbff;
+            border: 1px solid var(--line);
+            color: var(--muted);
+            border-radius: 14px;
+            padding: 0.8rem 0.95rem;
+            margin-bottom: 1rem;
+        }
+
+        .mini-card {
+            background: #ffffff;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 0.9rem;
+            margin-bottom: 0.8rem;
+        }
+
         .footer-note {
-            color: #95a8c9;
+            color: var(--muted);
             font-size: 0.86rem;
             margin-top: 1rem;
         }
-        .result-panel {
-            background: #0d172a;
-            border: 1px solid #23375a;
-            border-radius: 18px;
-            padding: 14px;
-            margin-bottom: 1rem;
+
+        .nav-caption {
+            color: var(--muted);
+            font-size: 0.85rem;
+            margin-top: 0.25rem;
         }
-        div[data-testid="stRadio"] label {
-            background: #0d172b;
-            border: 1px solid #23375a;
-            border-radius: 14px;
-            padding: 10px 12px;
-            margin-bottom: 8px;
-        }
-        div[data-testid="stRadio"] label:hover {
-            border-color: #3964a3;
-            background: #10203d;
-        }
+
         div[data-testid="stTextInput"] input {
-            border-radius: 14px !important;
+            border-radius: 12px !important;
+            border: 1px solid #c9d5e7 !important;
         }
+
         div.stButton > button {
-            border-radius: 14px !important;
+            border-radius: 12px !important;
             font-weight: 700 !important;
+        }
+
+        div[data-testid="stRadio"] label {
+            background: #ffffff;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 9px 10px;
+            margin-bottom: 7px;
+        }
+
+        div[data-testid="stRadio"] label:hover {
+            border-color: #9bb6dd;
+            background: #f7fbff;
         }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-
 def get_session():
     session = requests.Session()
     session.headers.update({"User-Agent": USER_AGENT})
     return session
 
-
 def normalize_name(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip().lower()
-
 
 def clean_html(value: str) -> str:
     text = re.sub(r"<script.*?</script>", "", value, flags=re.IGNORECASE | re.DOTALL)
@@ -179,7 +219,6 @@ def clean_html(value: str) -> str:
     text = html.unescape(text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
-
 
 def extract_profile_links_from_search_page(page: str):
     matches = re.findall(r'href="([^"]*athlete-biography\.html[^"]+)"', page, flags=re.IGNORECASE)
@@ -196,7 +235,6 @@ def extract_profile_links_from_search_page(page: str):
             results.append(href)
     return results
 
-
 def extract_profile_links_duckduckgo(page: str):
     pattern = re.compile(r'href="(.*?)"', re.IGNORECASE)
     raw_links = pattern.findall(page)
@@ -208,23 +246,19 @@ def extract_profile_links_duckduckgo(page: str):
             candidate = requests.utils.unquote(match.group(1)) if match else unescaped
         else:
             candidate = unescaped
-
         if "fis-ski.com/DB/general/athlete-biography.html" not in candidate:
             continue
         if "sectorcode=al" not in candidate.lower() and "sector=al" not in candidate.lower():
             continue
-
         candidate = candidate.replace("&amp;", "&")
         if candidate not in results:
             results.append(candidate)
     return results
 
-
 def build_fis_search_urls(query: str):
     query = " ".join(query.split())
     is_code = query.isdigit()
     urls = []
-
     base_params = {
         "sectorcode": "AL",
         "search": "true",
@@ -235,7 +269,6 @@ def build_fis_search_urls(query: str):
         "skis": "",
         "status": "",
     }
-
     if is_code:
         params = dict(base_params)
         params["firstname"] = ""
@@ -276,7 +309,6 @@ def build_fis_search_urls(query: str):
             unique.append(url)
     return unique
 
-
 def extract_value(text: str, label: str):
     pattern = rf"{re.escape(label)}\s*:?\s*(.{{0,90}}?)(?=\s+[A-Z][A-Za-z\- ]{{2,25}}\s*:|\s+[A-Z][a-z]+\s+[A-Z][A-Za-z]+\s*:|$)"
     match = re.search(pattern, text, re.IGNORECASE)
@@ -286,11 +318,9 @@ def extract_value(text: str, label: str):
     value = re.sub(r"\s+", " ", value)
     return value if value else "-"
 
-
 def extract_age(text: str):
     match = re.search(r"Age\s*:?\s*(\d{1,2})", text, re.IGNORECASE)
     return match.group(1) if match else "-"
-
 
 @st.cache_data(ttl=900, show_spinner=False)
 def fetch_profile(url: str):
@@ -301,7 +331,6 @@ def fetch_profile(url: str):
 
     title_match = re.search(r"<h1[^>]*>(.*?)</h1>", page, re.IGNORECASE | re.DOTALL)
     name = clean_html(title_match.group(1)) if title_match else "Unbekannter Athlet"
-
     clean_page = clean_html(page)
     competitor_match = re.search(r"competitorid=(\d+)", url, re.IGNORECASE)
     competitor_id = competitor_match.group(1) if competitor_match else "-"
@@ -328,13 +357,11 @@ def fetch_profile(url: str):
         "url": url,
     }
 
-
 @st.cache_data(ttl=900, show_spinner=True)
 def search_athletes(query: str):
     query = " ".join(query.split())
     if not query:
         return []
-
     session = get_session()
     profile_links = []
 
@@ -397,50 +424,59 @@ def search_athletes(query: str):
         athletes.append(athlete)
 
     athletes.sort(key=lambda a: a.get("score", 0), reverse=True)
-
     if is_code:
         exact = [a for a in athletes if a.get("fis_code") == query]
         if exact:
             return exact[:12]
-
     return athletes[:12]
-
 
 @st.cache_data(ttl=900, show_spinner=False)
 def fetch_recent_results(athlete_url: str):
     session = get_session()
     r = session.get(athlete_url, timeout=TIMEOUT)
     r.raise_for_status()
-    page = r.text
-
-    tables = pd.read_html(page)
+    tables = pd.read_html(r.text)
     frames = []
     for df in tables:
-        columns = [str(c).strip() for c in df.columns]
-        cols_lower = " | ".join(columns).lower()
-        if any(k in cols_lower for k in ["date", "place", "event", "rank", "nation", "points"]):
-            df.columns = columns
+        cols = [str(c).strip() for c in df.columns]
+        low = " | ".join(cols).lower()
+        if any(k in low for k in ["date", "place", "event", "discipline", "rank", "result", "points"]):
+            df.columns = cols
             frames.append(df)
-
     if not frames:
         return None
-
-    results = pd.concat(frames, ignore_index=True)
-    results = results.dropna(how="all")
-    results.columns = [str(c).strip() for c in results.columns]
-
+    results = pd.concat(frames, ignore_index=True).dropna(how="all")
     wanted = []
     for col in results.columns:
         low = col.lower()
         if any(k in low for k in ["date", "place", "event", "discipline", "rank", "result", "points", "nation"]):
             wanted.append(col)
-
     if wanted:
         results = results[wanted]
+    return results.head(25)
 
-    results = results.head(25)
-    return results
-
+def summarize_results(df: pd.DataFrame):
+    if df is None or df.empty:
+        return {"starts": "0", "top10": "-", "best": "-", "disciplines": "-"}
+    starts = len(df)
+    best = "-"
+    top10 = "-"
+    rank_col = None
+    for col in df.columns:
+        if "rank" in col.lower() or "place" in col.lower():
+            rank_col = col
+            break
+    if rank_col:
+        numeric = pd.to_numeric(df[rank_col], errors="coerce")
+        if numeric.notna().any():
+            best = str(int(numeric.min()))
+            top10 = str(int((numeric <= 10).sum()))
+    disc_cols = [c for c in df.columns if "discipline" in c.lower() or "event" in c.lower()]
+    disciplines = "-"
+    if disc_cols:
+        vals = df[disc_cols[0]].dropna().astype(str).head(5).tolist()
+        disciplines = ", ".join(vals[:3]) if vals else "-"
+    return {"starts": str(starts), "top10": top10, "best": best, "disciplines": disciplines}
 
 def metric_card(label: str, value: str):
     st.markdown(
@@ -448,89 +484,44 @@ def metric_card(label: str, value: str):
         unsafe_allow_html=True,
     )
 
-
 def kpi_card(label: str, value: str):
     st.markdown(
         f'<div class="kpi"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div></div>',
         unsafe_allow_html=True,
     )
 
-
-def summarize_results(df: pd.DataFrame):
-    if df is None or df.empty:
-        return {"starts": "0", "top10": "-", "best": "-", "disciplines": "-"}
-
-    starts = len(df)
-
-    best = "-"
-    rank_col = None
-    for col in df.columns:
-        if "rank" in col.lower() or "place" in col.lower():
-            rank_col = col
-            break
-
-    if rank_col:
-        numeric = pd.to_numeric(df[rank_col], errors="coerce")
-        if numeric.notna().any():
-            best_val = int(numeric.min())
-            best = str(best_val)
-            top10 = str(int((numeric <= 10).sum()))
-        else:
-            top10 = "-"
-    else:
-        top10 = "-"
-
-    disc_cols = [c for c in df.columns if "discipline" in c.lower() or "event" in c.lower()]
-    if disc_cols:
-        vals = df[disc_cols[0]].dropna().astype(str).head(5).tolist()
-        disciplines = ", ".join(vals[:3]) if vals else "-"
-    else:
-        disciplines = "-"
-
-    return {
-        "starts": str(starts),
-        "top10": top10,
-        "best": best,
-        "disciplines": disciplines
-    }
-
-
 if "results" not in st.session_state:
     st.session_state.results = []
 if "selected_index" not in st.session_state:
     st.session_state.selected_index = 0
 if "active_view" not in st.session_state:
-    st.session_state.active_view = "Dashboard"
+    st.session_state.active_view = "Athletendaten"
 
+# Full-width header
+st.markdown('<div class="header-shell">', unsafe_allow_html=True)
+h1, h2, h3 = st.columns([2.4, 5.2, 0.8])
+with h1:
+    s1, s2 = st.columns([3.1, 1.45])
+    with s1:
+        search_query = st.text_input("", placeholder="Athlet oder FIS-Code suchen…", label_visibility="collapsed")
+    with s2:
+        search_button = st.button("Suchen", use_container_width=True)
+with h2:
+    st.markdown(f'<div class="header-title">{APP_NAME}</div>', unsafe_allow_html=True)
+with h3:
+    st.markdown(f'<div class="header-version">{APP_VERSION}</div>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Persistent left navigation under header
 with st.sidebar:
     st.markdown("## Navigation")
     st.session_state.active_view = st.radio(
-        "Ansicht",
-        ["Dashboard", "Athletenprofil", "Vergleich", "Resultate"],
+        "Bereich",
+        ["Athletendaten", "Rennauswertung", "FIS-Punkte", "Ergebnisse"],
         label_visibility="collapsed",
     )
     st.markdown("---")
-    st.caption("Der Resultate-Tab zeigt jetzt die erkannten Resultat-Tabellen der Athletenseite, sofern sie auf der Profilseite direkt auslesbar sind.")
-
-st.markdown('<div class="header-wrap">', unsafe_allow_html=True)
-c1, c2, c3 = st.columns([2.4, 4.8, 0.8])
-with c1:
-    q_col, b_col = st.columns([3.2, 1.4])
-    with q_col:
-        search_query = st.text_input("", placeholder="Athlet oder FIS-Code suchen…", label_visibility="collapsed")
-    with b_col:
-        search_button = st.button("Suchen", use_container_width=True)
-with c2:
-    st.markdown(
-        f'<div class="app-title">{APP_NAME}</div><div class="app-subtitle">Modernes Analyse-Dashboard für FIS Alpine Athleten</div>',
-        unsafe_allow_html=True,
-    )
-with c3:
-    st.markdown(
-        f'<div style="text-align:right; color:#9bb0d3; padding-top:0.65rem;">{APP_VERSION}</div>',
-        unsafe_allow_html=True,
-    )
-st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="nav-caption">Die Navigation bleibt immer sichtbar und liegt unter der Kopfzeile.</div>', unsafe_allow_html=True)
 
 if search_button:
     if not search_query.strip():
@@ -545,28 +536,29 @@ if search_button:
 results = st.session_state.results
 selected_athlete = results[st.session_state.selected_index] if results else None
 
-if st.session_state.active_view == "Dashboard":
-    left, right = st.columns([1.05, 2.15])
+left, right = st.columns([1.05, 2.15])
 
-    with left:
-        st.markdown('<div class="section-title">Trefferliste</div>', unsafe_allow_html=True)
-        if not results:
-            st.info("Noch keine Treffer. Suche oben nach einem Athleten.")
-        else:
-            labels = [f"{a['name']} | {a['nation']} | FIS-Code: {a['fis_code']}" for a in results]
-            idx = st.radio(
-                "Treffer auswählen",
-                options=list(range(len(labels))),
-                format_func=lambda i: labels[i],
-                index=min(st.session_state.selected_index, len(labels) - 1),
-                label_visibility="collapsed",
-            )
-            st.session_state.selected_index = idx
-            selected_athlete = results[idx]
+with left:
+    st.markdown('<div class="content-title">Trefferliste</div>', unsafe_allow_html=True)
+    if not results:
+        st.info("Noch keine Treffer. Suche oben nach einem Athleten.")
+    else:
+        labels = [f"{a['name']} | {a['nation']} | FIS-Code: {a['fis_code']}" for a in results]
+        idx = st.radio(
+            "Treffer auswählen",
+            options=list(range(len(labels))),
+            format_func=lambda i: labels[i],
+            index=min(st.session_state.selected_index, len(labels)-1),
+            label_visibility="collapsed",
+        )
+        st.session_state.selected_index = idx
+        selected_athlete = results[idx]
 
-    with right:
+with right:
+    if st.session_state.active_view == "Athletendaten":
+        st.markdown('<div class="content-title">Athletendaten</div>', unsafe_allow_html=True)
         if not selected_athlete:
-            st.info("Sobald ein Athlet gefunden wird, erscheint hier das Dashboard.")
+            st.info("Sobald ein Athlet gefunden wird, erscheinen hier die Athletendaten.")
         else:
             hero = (
                 '<div class="hero-card">'
@@ -576,17 +568,17 @@ if st.session_state.active_view == "Dashboard":
             )
             st.markdown(hero, unsafe_allow_html=True)
 
-            k1, k2, k3, k4 = st.columns(4)
-            with k1:
-                kpi_card("Nation", selected_athlete["nation"])
-            with k2:
-                kpi_card("FIS-Code", selected_athlete["fis_code"])
-            with k3:
-                kpi_card("Alter", selected_athlete["age"])
-            with k4:
-                kpi_card("Status", selected_athlete["status"])
+            row1 = st.columns(4)
+            summary = [
+                ("Nation", selected_athlete["nation"]),
+                ("FIS-Code", selected_athlete["fis_code"]),
+                ("Alter", selected_athlete["age"]),
+                ("Status", selected_athlete["status"]),
+            ]
+            for col, (label, value) in zip(row1, summary):
+                with col:
+                    kpi_card(label, value)
 
-            st.markdown('<div class="section-title">Athletenübersicht</div>', unsafe_allow_html=True)
             metric_rows = [
                 [("Geburtsdatum", selected_athlete["birthdate"]), ("Geschlecht", selected_athlete["gender"]), ("Club", selected_athlete["club"])],
                 [("Wohnort", selected_athlete["residence"]), ("Geburtsort", selected_athlete["place_of_birth"]), ("Skis", selected_athlete["skis"])],
@@ -598,84 +590,66 @@ if st.session_state.active_view == "Dashboard":
                 for col, (label, value) in zip(cols, row):
                     with col:
                         metric_card(label, value)
+            st.link_button("Offizielles FIS-Profil öffnen", selected_athlete["url"])
 
-            a1, a2 = st.columns([1, 1.6])
-            with a1:
-                st.link_button("Offizielles FIS-Profil öffnen", selected_athlete["url"], use_container_width=True)
-            with a2:
-                st.caption("Dashboard-Struktur ist bereit für Resultate, FIS-Punkte und Vergleiche.")
-
-elif st.session_state.active_view == "Athletenprofil":
-    st.markdown('<div class="section-title">Athletenprofil</div>', unsafe_allow_html=True)
-    if not selected_athlete:
-        st.info("Suche zuerst einen Athleten.")
-    else:
-        hero = (
-            '<div class="hero-card">'
-            f'<div class="hero-name">{selected_athlete["name"]}</div>'
-            f'<div class="hero-meta">{selected_athlete["nation"]} | FIS-Code {selected_athlete["fis_code"]}</div>'
-            '</div>'
-        )
-        st.markdown(hero, unsafe_allow_html=True)
-
-        metrics = [
-            ("Nation", selected_athlete["nation"]),
-            ("FIS-Code", selected_athlete["fis_code"]),
-            ("Competitor ID", selected_athlete["competitor_id"]),
-            ("Alter", selected_athlete["age"]),
-            ("Geburtsdatum", selected_athlete["birthdate"]),
-            ("Status", selected_athlete["status"]),
-            ("Club", selected_athlete["club"]),
-            ("Wohnort", selected_athlete["residence"]),
-        ]
-        for start in range(0, len(metrics), 4):
-            cols = st.columns(4)
-            for col, (label, value) in zip(cols, metrics[start:start + 4]):
-                with col:
-                    metric_card(label, value)
-        st.link_button("FIS-Profil öffnen", selected_athlete["url"])
-
-elif st.session_state.active_view == "Vergleich":
-    st.markdown('<div class="section-title">Vergleich</div>', unsafe_allow_html=True)
-    st.info("Dieses Modul ist als nächster Ausbauschritt vorbereitet.")
-    if results:
-        c1, c2 = st.columns(2)
-        with c1:
-            kpi_card("Aktuell ausgewählt", results[st.session_state.selected_index]["name"])
-        with c2:
-            kpi_card("Treffer im Speicher", str(len(results)))
-
-elif st.session_state.active_view == "Resultate":
-    st.markdown('<div class="section-title">Resultate</div>', unsafe_allow_html=True)
-    if not selected_athlete:
-        st.info("Suche zuerst einen Athleten.")
-    else:
-        st.markdown(
-            f'<div class="mini-card"><strong>{selected_athlete["name"]}</strong><br>{selected_athlete["nation"]} | FIS-Code {selected_athlete["fis_code"]}</div>',
-            unsafe_allow_html=True,
-        )
-
-        try:
-            results_df = fetch_recent_results(selected_athlete["url"])
-        except Exception as exc:
-            results_df = None
-            st.warning(f"Resultate konnten nicht geladen werden: {exc}")
-
-        summary = summarize_results(results_df)
-        s1, s2, s3, s4 = st.columns(4)
-        with s1:
-            kpi_card("Erkannte Starts", summary["starts"])
-        with s2:
-            kpi_card("Top 10", summary["top10"])
-        with s3:
-            kpi_card("Beste Platzierung", summary["best"])
-        with s4:
-            kpi_card("Disziplinen", summary["disciplines"])
-
-        if results_df is None or results_df.empty:
-            st.info("Auf der Profilseite konnte keine direkt auslesbare Resultat-Tabelle gefunden werden. Als nächster Schritt kann ein gezielterer Resultat-Parser eingebaut werden.")
+    elif st.session_state.active_view == "Rennauswertung":
+        st.markdown('<div class="content-title">Rennauswertung</div>', unsafe_allow_html=True)
+        if not selected_athlete:
+            st.info("Suche zuerst einen Athleten.")
         else:
-            st.markdown('<div class="result-panel">Die untenstehenden Tabellen wurden direkt aus der Athletenseite erkannt und für die Analyse zusammengeführt.</div>', unsafe_allow_html=True)
-            st.dataframe(results_df, use_container_width=True, hide_index=True)
+            st.markdown('<div class="panel-note">Dieses Modul ist als klarer Platzhalter für die spätere Rennauswertung vorbereitet. Hier können später Split-Zeiten, Platzierungsanalyse und Fehlerbilder ergänzt werden.</div>', unsafe_allow_html=True)
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                kpi_card("Analyse-Status", "Vorbereitet")
+            with c2:
+                kpi_card("Athlet", selected_athlete["name"])
+            with c3:
+                kpi_card("Nation", selected_athlete["nation"])
 
-st.markdown('<div class="footer-note">Aktueller Fokus: stabile Athletensuche, moderner App-Aufbau und erste Resultatendarstellung.</div>', unsafe_allow_html=True)
+    elif st.session_state.active_view == "FIS-Punkte":
+        st.markdown('<div class="content-title">FIS-Punkte</div>', unsafe_allow_html=True)
+        if not selected_athlete:
+            st.info("Suche zuerst einen Athleten.")
+        else:
+            st.markdown('<div class="panel-note">Dieser Bereich ist für die spätere FIS-Punkte-Analyse vorbereitet. Hier können Disziplin-Punkte, Entwicklungen und Trenddiagramme eingebaut werden.</div>', unsafe_allow_html=True)
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                kpi_card("Athlet", selected_athlete["name"])
+            with c2:
+                kpi_card("FIS-Code", selected_athlete["fis_code"])
+            with c3:
+                kpi_card("Modul", "Vorbereitet")
+
+    elif st.session_state.active_view == "Ergebnisse":
+        st.markdown('<div class="content-title">Ergebnisse</div>', unsafe_allow_html=True)
+        if not selected_athlete:
+            st.info("Suche zuerst einen Athleten.")
+        else:
+            st.markdown(
+                f'<div class="mini-card"><strong>{selected_athlete["name"]}</strong><br>{selected_athlete["nation"]} | FIS-Code {selected_athlete["fis_code"]}</div>',
+                unsafe_allow_html=True,
+            )
+            try:
+                results_df = fetch_recent_results(selected_athlete["url"])
+            except Exception as exc:
+                results_df = None
+                st.warning(f"Ergebnisse konnten nicht geladen werden: {exc}")
+
+            summary = summarize_results(results_df)
+            s1, s2, s3, s4 = st.columns(4)
+            with s1:
+                kpi_card("Erkannte Starts", summary["starts"])
+            with s2:
+                kpi_card("Top 10", summary["top10"])
+            with s3:
+                kpi_card("Beste Platzierung", summary["best"])
+            with s4:
+                kpi_card("Disziplinen", summary["disciplines"])
+
+            if results_df is None or results_df.empty:
+                st.info("Auf der Profilseite konnte keine direkt auslesbare Ergebnis-Tabelle gefunden werden.")
+            else:
+                st.markdown('<div class="panel-note">Die untenstehende Tabelle wurde direkt aus der Athletenseite erkannt und für die App zusammengeführt.</div>', unsafe_allow_html=True)
+                st.dataframe(results_df, use_container_width=True, hide_index=True)
+
+st.markdown('<div class="footer-note">Aktueller Fokus: klare Tool-Struktur mit Kopfzeile, permanenter Navigation und sauber getrennten Analysebereichen.</div>', unsafe_allow_html=True)

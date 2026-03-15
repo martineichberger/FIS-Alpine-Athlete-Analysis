@@ -1,9 +1,16 @@
 # FIS-Alpine-Athlete-Analysis
 
-Version v3.2 erweitert den Resultate-Tab:
-- erkennt Tabellen auf der Athletenseite
-- zeigt eine Resultate-Tabelle an
-- berechnet erste Kennzahlen wie Starts, Top-10 und beste Platzierung
+Version v4.0 bringt die gewünschte klare Struktur:
+- dunkelblaue Kopfzeile
+- weißer Hauptbereich
+- geringere Header-Höhe
+- keine hellblaue Zusatzleiste in der Kopfzeile
+- permanente Navigation links unter der Kopfzeile
+- Navigationspunkte:
+  - Athletendaten
+  - Rennauswertung
+  - FIS-Punkte
+  - Ergebnisse
 
 ## Lokal starten
 ```bash
