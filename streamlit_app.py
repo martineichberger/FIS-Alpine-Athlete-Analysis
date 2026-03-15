@@ -8,7 +8,7 @@ import requests
 import streamlit as st
 
 APP_NAME = "FIS-Alpine-Athlete-Analysis"
-APP_VERSION = "v4.3-streamlit"
+APP_VERSION = "v5.1-streamlit"
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -84,8 +84,9 @@ st.markdown(
         .mini-card { background: #ffffff; border: 1px solid var(--line); border-radius: 16px; padding: 0.9rem; margin-bottom: 0.8rem; }
         .footer-note { color: var(--muted); font-size: 0.86rem; margin-top: 1rem; }
         .nav-caption { color: var(--muted); font-size: 0.85rem; margin-top: 0.25rem; }
+        .search-panel { background:#ffffff; border:1px solid var(--line); border-radius:18px; padding:1rem; margin-bottom:1rem; box-shadow: 0 2px 10px rgba(16, 32, 56, 0.04); }
         div[data-testid="stTextInput"] input { border-radius: 12px !important; border: 1px solid #c9d5e7 !important; }
-        div.stButton > button { border-radius: 12px !important; font-weight: 700 !important; }
+        div.stButton > button, div[data-testid="stFormSubmitButton"] button { border-radius: 12px !important; font-weight: 700 !important; width:100%; }
         div[data-testid="stRadio"] label { background: #ffffff; border: 1px solid var(--line); border-radius: 12px; padding: 9px 10px; margin-bottom: 7px; }
         div[data-testid="stRadio"] label:hover { border-color: #9bb6dd; background: #f7fbff; }
     </style>
@@ -93,13 +94,16 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
 def get_session():
     session = requests.Session()
     session.headers.update({"User-Agent": USER_AGENT})
     return session
 
+
 def normalize_name(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip().lower()
+
 
 def clean_html(value: str) -> str:
     text = re.sub(r"<script.*?</script>", "", value, flags=re.IGNORECASE | re.DOTALL)
@@ -108,6 +112,7 @@ def clean_html(value: str) -> str:
     text = html.unescape(text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
 
 def extract_profile_links_from_search_page(page: str):
     matches = re.findall(r'href="([^"]*athlete-biography\.html[^"]+)"', page, flags=re.IGNORECASE)
@@ -123,6 +128,7 @@ def extract_profile_links_from_search_page(page: str):
         if href not in results:
             results.append(href)
     return results
+
 
 def extract_profile_links_duckduckgo(page: str):
     pattern = re.compile(r'href="(.*?)"', re.IGNORECASE)
@@ -143,6 +149,7 @@ def extract_profile_links_duckduckgo(page: str):
         if candidate not in results:
             results.append(candidate)
     return results
+
 
 def build_fis_search_urls(query: str):
     query = " ".join(query.split())
@@ -198,6 +205,7 @@ def build_fis_search_urls(query: str):
             unique.append(url)
     return unique
 
+
 def extract_value(text: str, label: str):
     pattern = rf"{re.escape(label)}\s*:?\s*(.{{0,90}}?)(?=\s+[A-Z][A-Za-z\- ]{{2,25}}\s*:|\s+[A-Z][a-z]+\s+[A-Z][A-Za-z]+\s*:|$)"
     match = re.search(pattern, text, re.IGNORECASE)
@@ -207,9 +215,11 @@ def extract_value(text: str, label: str):
     value = re.sub(r"\s+", " ", value)
     return value if value else "-"
 
+
 def extract_age(text: str):
     match = re.search(r"Age\s*:?\s*(\d{1,2})", text, re.IGNORECASE)
     return match.group(1) if match else "-"
+
 
 def country_code_to_flag(code: str) -> str:
     code = (code or "").strip().upper()
@@ -223,6 +233,7 @@ def country_code_to_flag(code: str) -> str:
         "CHN": "🇨🇳", "AUS": "🇦🇺", "NZL": "🇳🇿", "ARG": "🇦🇷", "CHI": "🇨🇱"
     }
     return special.get(code, "")
+
 
 def split_name(title_name: str):
     title_name = re.sub(r"\s+", " ", (title_name or "").strip())
@@ -238,6 +249,7 @@ def split_name(title_name: str):
     if len(parts) >= 2:
         return parts[-1], " ".join(parts[:-1])
     return title_name, "-"
+
 
 def extract_nation_from_page(page: str, clean_page: str):
     code_match = re.search(r">\s*([A-Z]{3})\s+([A-Z][a-zA-Z\-]+(?:\s+[A-Z][a-zA-Z\-]+)?)\s*<", page)
@@ -257,6 +269,7 @@ def extract_nation_from_page(page: str, clean_page: str):
             return parts[0].upper(), parts[1].strip()
         return "-", nation_label.strip()
     return "-", "-"
+
 
 @st.cache_data(ttl=900, show_spinner=False)
 def fetch_profile(url: str):
@@ -297,6 +310,7 @@ def fetch_profile(url: str):
         "url": url,
     }
 
+
 @st.cache_data(ttl=900, show_spinner=True)
 def search_athletes(query: str):
     query = " ".join(query.split())
@@ -311,24 +325,31 @@ def search_athletes(query: str):
             profile_links.extend(extract_profile_links_from_search_page(response.text))
         except Exception:
             pass
+
     if not profile_links:
-        ddg_query = (
-            'site:fis-ski.com/DB/general/athlete-biography.html '
-            '"sectorcode=AL" '
-            f'"{query}"'
-        )
-        response = session.get(DUCKDUCKGO_HTML, params={"q": ddg_query}, timeout=TIMEOUT)
-        response.raise_for_status()
-        profile_links.extend(extract_profile_links_duckduckgo(response.text))
+        try:
+            ddg_query = (
+                'site:fis-ski.com/DB/general/athlete-biography.html '
+                '"sectorcode=AL" '
+                f'"{query}"'
+            )
+            response = session.get(DUCKDUCKGO_HTML, params={"q": ddg_query}, timeout=TIMEOUT)
+            response.raise_for_status()
+            profile_links.extend(extract_profile_links_duckduckgo(response.text))
+        except Exception:
+            pass
+
     unique_links = []
     for link in profile_links:
         if link not in unique_links:
             unique_links.append(link)
+
     athletes = []
     seen = set()
     is_code = query.isdigit()
     q = normalize_name(query)
     parts = [p for p in q.split() if p]
+
     def score(athlete):
         name = normalize_name(athlete.get("name", ""))
         value = 0
@@ -338,9 +359,10 @@ def search_athletes(query: str):
             value += 60
         if parts and all(p in name for p in parts):
             value += 40
-        if is_code and athlete.get("fis_code") == query:
+        if is_code and str(athlete.get("fis_code", "")).strip() == query:
             value += 140
         return value
+
     for link in unique_links[:25]:
         try:
             athlete = fetch_profile(link)
@@ -356,12 +378,14 @@ def search_athletes(query: str):
         seen.add(unique_key)
         athlete["score"] = score(athlete)
         athletes.append(athlete)
+
     athletes.sort(key=lambda a: a.get("score", 0), reverse=True)
     if is_code:
-        exact = [a for a in athletes if a.get("fis_code") == query]
+        exact = [a for a in athletes if str(a.get("fis_code", "")).strip() == query]
         if exact:
             return exact[:12]
     return athletes[:12]
+
 
 def results_url_from_profile(athlete_url: str) -> str:
     if "type=result" in athlete_url:
@@ -370,12 +394,14 @@ def results_url_from_profile(athlete_url: str) -> str:
         return athlete_url + "&type=result"
     return athlete_url + "?type=result"
 
+
 def compute_season(date_str: str):
     try:
         dt = datetime.strptime(date_str, "%d-%m-%Y")
     except Exception:
         return None
     return dt.year + 1 if dt.month >= 7 else dt.year
+
 
 def extract_discipline(text: str):
     lower = text.lower()
@@ -387,6 +413,7 @@ def extract_discipline(text: str):
             best = d
             best_pos = pos
     return best, best_pos
+
 
 def parse_result_line(text: str):
     text = re.sub(r"\s+", " ", text).strip()
@@ -419,7 +446,6 @@ def parse_result_line(text: str):
             break
 
     nation = "-"
-    # pick last likely country code before discipline if possible, else first one after date
     before_disc = text[10:discipline_pos]
     codes = re.findall(r"\b([A-Z]{3})\b", before_disc)
     if codes:
@@ -443,6 +469,7 @@ def parse_result_line(text: str):
         "Raw": text,
     }
 
+
 @st.cache_data(ttl=900, show_spinner=False)
 def fetch_result_entries(athlete_url: str):
     url = results_url_from_profile(athlete_url)
@@ -452,10 +479,8 @@ def fetch_result_entries(athlete_url: str):
     page = r.text
 
     candidates = []
-    # anchor texts
     anchors = re.findall(r"<a[^>]*>(.*?)</a>", page, flags=re.IGNORECASE | re.DOTALL)
     candidates.extend(clean_html(a) for a in anchors)
-    # fallback on longer text blocks with dates
     blocks = re.findall(r">(.*?)<", page, flags=re.IGNORECASE | re.DOTALL)
     candidates.extend(clean_html(b) for b in blocks if re.search(r"\d{2}-\d{2}-\d{4}", clean_html(b)))
 
@@ -479,6 +504,7 @@ def fetch_result_entries(athlete_url: str):
     df = df.sort_values(["SortDate", "Disziplin", "Kategorie"], ascending=[False, True, True]).reset_index(drop=True)
     return df
 
+
 def summarize_results(df: pd.DataFrame):
     if df is None or df.empty:
         return {"starts": "0", "top10": "-", "best": "-", "disciplines": "-"}
@@ -488,6 +514,7 @@ def summarize_results(df: pd.DataFrame):
     top10 = str(int((numeric <= 10).sum())) if numeric.notna().any() else "-"
     disciplines = ", ".join(df["Disziplin"].dropna().astype(str).unique()[:4]) if "Disziplin" in df else "-"
     return {"starts": str(starts), "top10": top10, "best": best, "disciplines": disciplines or "-"}
+
 
 def starts_by_discipline(df: pd.DataFrame):
     if df is None or df.empty:
@@ -500,11 +527,13 @@ def starts_by_discipline(df: pd.DataFrame):
         .reset_index(drop=True)
     )
 
+
 def metric_card(label: str, value: str):
     st.markdown(
         f'<div class="metric-card"><div class="metric-label">{label}</div><div class="metric-value">{value}</div></div>',
         unsafe_allow_html=True,
     )
+
 
 def kpi_card(label: str, value: str):
     st.markdown(
@@ -512,42 +541,61 @@ def kpi_card(label: str, value: str):
         unsafe_allow_html=True,
     )
 
-if "results" not in st.session_state:
-    st.session_state.results = []
-if "selected_index" not in st.session_state:
-    st.session_state.selected_index = 0
-if "active_view" not in st.session_state:
-    st.session_state.active_view = "Athletendaten"
 
+def init_state():
+    defaults = {
+        "results": [],
+        "selected_index": 0,
+        "active_view": "Athletendaten",
+        "search_query": "",
+        "last_query": "",
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+
+init_state()
 
 st.markdown(
-'''
-<div style="background:#102649;color:white;padding:14px 22px;margin:-1rem -1rem 1rem -1rem;
-display:flex;align-items:center;justify-content:space-between;">
-    <div style="font-weight:800;font-size:1.35rem;">FIS-Alpine-Athlete-Analysis</div>
-    <div style="display:flex;align-items:center;gap:16px;">
-        <div style="opacity:0.9;">v5.0</div>
-        <button style="background:#1e3a6b;border:none;color:white;
-        font-weight:700;border-radius:8px;padding:6px 10px;cursor:pointer;">?</button>
+    f'''
+    <div style="background:#102649;color:white;padding:14px 22px;margin:-1rem -1rem 1rem -1rem;
+    display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-weight:800;font-size:1.35rem;">{APP_NAME}</div>
+        <div style="display:flex;align-items:center;gap:16px;">
+            <div style="opacity:0.9;">{APP_VERSION}</div>
+            <div style="background:#1e3a6b;border:none;color:white;font-weight:700;border-radius:8px;padding:6px 10px;">Suche</div>
+        </div>
     </div>
-</div>
-''',
-unsafe_allow_html=True
+    ''',
+    unsafe_allow_html=True,
 )
 
+st.markdown('<div class="search-panel">', unsafe_allow_html=True)
+with st.form("athlete_search_form", clear_on_submit=False):
+    input_col, button_col = st.columns([4, 1])
+    with input_col:
+        search_query = st.text_input(
+            "Athletensuche",
+            value=st.session_state.search_query,
+            placeholder="Name oder FIS-Code eingeben",
+            label_visibility="collapsed",
+        )
+    with button_col:
+        search_button = st.form_submit_button("Suchen")
+st.markdown('</div>', unsafe_allow_html=True)
 
-
-if "active_view" not in st.session_state:
-    st.session_state.active_view = "Athletendaten"
+st.session_state.search_query = search_query
 
 if search_button:
-
-    if not search_query.strip():
+    cleaned_query = search_query.strip()
+    if not cleaned_query:
         st.warning("Bitte gib einen Athletennamen oder einen FIS-Code ein.")
     else:
         with st.spinner("Athleten werden gesucht ..."):
-            st.session_state.results = search_athletes(search_query)
+            st.session_state.results = search_athletes(cleaned_query)
             st.session_state.selected_index = 0
+            st.session_state.last_query = cleaned_query
         if not st.session_state.results:
             st.warning("Kein passender Alpine-Athlet gefunden.")
 
@@ -563,10 +611,13 @@ with nav_col:
         ["Athletendaten", "Rennauswertung", "FIS-Punkte", "Ergebnisse"],
         label_visibility="collapsed",
     )
-    st.markdown('<div class="nav-caption">Die Navigation liegt jetzt unterhalb der Kopfzeile.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="nav-caption">Die Athletensuche liegt wieder oberhalb der Navigation und ist direkt nutzbar.</div>', unsafe_allow_html=True)
     st.markdown('<div class="content-title" style="margin-top:1rem;">Trefferliste</div>', unsafe_allow_html=True)
     if not results:
-        st.info("Noch keine Treffer. Suche oben nach einem Athleten.")
+        hint = "Noch keine Treffer. Suche oben nach einem Athleten."
+        if st.session_state.last_query:
+            hint = f'Keine Treffer für „{st.session_state.last_query}“. Bitte anderen Namen oder FIS-Code testen.'
+        st.info(hint)
     else:
         labels = [f"{a['name']} | {a['nation_code']} | FIS-Code: {a['fis_code']}" for a in results]
         idx = st.radio(
@@ -681,4 +732,4 @@ with main_col:
 
                 st.link_button("Offizielle FIS-Ergebnisseite öffnen", results_url_from_profile(selected_athlete["url"]))
 
-st.markdown('<div class="footer-note">v4.3 verbessert den Ergebnisse-Parser für alle Disziplinen, inklusive Giant Slalom, und zeigt die Resultate chronologisch an.</div>', unsafe_allow_html=True)
+st.markdown('<div class="footer-note">v5.1 repariert die Athletensuche wieder vollständig und behält den verbesserten Ergebnisse-Parser bei.</div>', unsafe_allow_html=True)
